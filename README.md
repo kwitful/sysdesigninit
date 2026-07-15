@@ -4,137 +4,150 @@ An AI-assisted **system design** assistant built on Google's
 [Agent Development Kit (ADK)](https://adk.dev/).
 
 Give it a problem ("Design a URL shortener for a startup", "Design a
-Netflix-like video platform") and it runs a **multi-agent pipeline** that
-produces seven detailed markdown design documents — one per canonical
-system-design section — plus an index. Every document ends with a candid
-**Reasoning** footer explaining what was included, what was omitted or
-simplified, and why.
+Netflix-like video platform"). A **conversational coordinator** clarifies
+scope across turns, then invokes a **document pipeline** that writes seven
+detailed markdown design docs plus an index. Every document ends with a candid
+**Reasoning** footer (what was included, omitted/simplified, and why).
 
-## Why a pipeline, not one big prompt
+**Model providers:** Gemini (default) or **OpenRouter** (and other LiteLLM
+providers) via ADK's official `LiteLlm` integration.
 
-One model asked to "write everything" tends to be vague, inconsistent, and
-either over- or under-engineered. Splitting the work keeps each section deep,
-lets us enforce the Reasoning footer, and mirrors how real design actually
-happens: clarify → sketch → detail → harden.
-
-## The agent graph
+## Architecture (ADK-aligned)
 
 ```
-root_agent (SequentialAgent: system_design_pipeline)
-│
-1. design_coordinator        ── design_context (clarify scope, scale, maturity)
-│
-2. requirements_agent        ── 01-requirements.md
-│
-3. architecture_agent        ── 02-architecture.md
-│
-4. api_and_data (ParallelAgent)
-      ├─ api_agent           ── 03-api.md
-      └─ data_agent          ── 04-data-model.md
-│
-5. component_agent           ── 05-component-design.md
-│
-6. hardening (ParallelAgent)
-      ├─ resilience_agent    ── 06-resilience.md
-      └─ security_agent      ── 07-security-ops.md
-│
-7. index_agent               ── 00-index.md
+root_agent (LlmAgent: design_coordinator)     ← talks to the user
+  tools:
+    - init_design_workspace   → state["workspace"]
+    - save_design_context     → state["design_context"]
+    - AgentTool(run_design_pipeline)
+            │
+            ▼
+run_design_pipeline (SequentialAgent)         ← only after brief is saved
+  1. requirements_agent        → 01-requirements.md
+  2. architecture_agent        → 02-architecture.md
+  3. api_and_data (ParallelAgent)
+        ├─ api_agent           → 03-api.md
+        └─ data_agent          → 04-data-model.md
+  4. component_agent           → 05-component-design.md
+  5. hardening (ParallelAgent)
+        ├─ resilience_agent    → 06-resilience.md
+        └─ security_agent      → 07-security-ops.md
+  6. index_agent               → 00-index.md
 ```
 
-- **SequentialAgent** runs steps in order, passing the same session state
-  forward so each agent can read earlier decisions.
-- **ParallelAgent** fans out where work is independent (API + data model;
-  resilience + security/ops).
-- Each specialist has an `output_key` so its full markdown lands in shared
-  state, and downstream agents reference those keys via `{key}` substitution.
-- Every specialist writes its file to disk via the `write_design_doc` tool.
+- Clarification happens **before** the pipeline. The coordinator asks at most
+  one question per turn and waits; it does not start writing docs until you
+  answer.
+- Handoff uses ADK `ToolContext` state + `AgentTool` (documented ADK patterns).
+- Specialists share prior outputs via `{key}` instruction substitution and
+  `output_key`.
+
+## Models (Gemini or OpenRouter)
+
+Configured in `sys_des_in/.env` (see `.env.example`). The factory lives in
+`sys_des_in/models.py` and uses ADK's `LiteLlm` for non-Gemini providers.
+
+### Gemini (default)
+
+```text
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-flash-latest
+GOOGLE_GENAI_USE_ENTERPRISE=0
+GOOGLE_API_KEY=your_key
+```
+
+### OpenRouter (main alternate path)
+
+```text
+LLM_PROVIDER=openrouter
+LLM_MODEL=openrouter/openai/gpt-4o-mini
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+Any [OpenRouter model](https://openrouter.ai/models) works; the LiteLLM id is
+`openrouter/<provider>/<model>`. If you omit the `openrouter/` prefix, it is
+added automatically.
+
+### Other LiteLLM providers
+
+```text
+LLM_PROVIDER=litellm
+LLM_MODEL=anthropic/claude-3-haiku-20240307
+ANTHROPIC_API_KEY=...
+```
+
+On Windows, `PYTHONUTF8=1` is set automatically (ADK LiteLLM guidance).
 
 ## The seven documents
 
-1. **Requirements and Scope** — functional + non-functional requirements,
-   CAP stance, out-of-scope.
-2. **High-Level Architecture** — clients, routing/gateway, app tier, data tier,
-   data flow, tech picks.
-3. **Interface / API Design** — protocols, endpoints, versioning.
-4. **Data Model and Storage** — DB selection, schema, caching, scaling.
-5. **Detailed Component Design** — core algorithms, workflows, async
-   processing.
-6. **Bottlenecks, Redundancy, Resilience** — SPOFs, rate limiting, graceful
-   degradation.
-7. **Security, Observability, Operations** — auth, encryption, metrics,
-   logging, tracing, ops.
+1. **Requirements and Scope**
+2. **High-Level Architecture**
+3. **Interface / API Design**
+4. **Data Model and Storage**
+5. **Detailed Component Design**
+6. **Bottlenecks, Redundancy, Resilience**
+7. **Security, Observability, Operations**
 
-Each ends with a `## Reasoning` section: what was included, what was
-omitted/simplified and why (e.g. "Kafka omitted: write QPS < 100 and
-synchronous processing is sufficient"), assumptions, and open questions.
+Each ends with `## Reasoning`. Plus `00-index.md`.
 
 ## Project layout
 
 ```
-sys_des_in/                # agent package (ADK requires a valid Python identifier)
-├── agent.py              # ADK entry point (exposes root_agent)
-├── runner.py             # optional CLI runner
-├── __init__.py
-├── .env                  # GOOGLE_API_KEY=...
-├── adk-documentation.txt # local ADK docs (reference)
+sys_des_in/
+├── agent.py              # ADK entry point (root_agent)
+├── runner.py             # multi-turn CLI (safe input loop)
+├── models.py             # Gemini / OpenRouter / LiteLLM factory
+├── .env.example
+├── .env                  # secrets (gitignored)
 ├── agents/
-│   ├── __init__.py
-│   ├── prompts.py        # shared schemas + Reasoning footer contract
-│   └── orchestrator.py   # builds the SequentialAgent root + specialists
+│   ├── prompts.py
+│   └── orchestrator.py   # coordinator + AgentTool pipeline
 ├── tools/
-│   ├── __init__.py
-│   └── file_tools.py     # init_design_workspace / write / read / list
-└── design_outputs/       # generated markdown lives here (per workspace)
+│   ├── file_tools.py     # write / read / list (filename whitelist)
+│   └── state_tools.py    # init workspace + save_design_context
+└── design_outputs/
 ```
-
-> Note: the agent folder is named `sys_des_in` (underscores), not
-> `sys-des-in`. ADK only loads agent folders whose names are valid Python
-> identifiers (`^[a-zA-Z0-9_]+$`), so dashes are not allowed.
 
 ## Setup
 
-1. Create a virtual environment and install ADK:
-
-   ```bash
-   python -m venv .venv
-   # Windows
-   .venv\Scripts\activate
-   # macOS / Linux
-   source .venv/bin/activate
-
-   pip install -r requirements.txt
-   ```
-
-2. Put a Gemini API key in `sys_des_in/.env` (already created):
-
-   ```text
-   GOOGLE_GENAI_USE_ENTERPRISE=0
-   GOOGLE_API_KEY=your_key_from_https://aistudio.google.com/app/apikey
-   ```
+```bash
+cd path/to/sysdesigninit   # folder that contains sys_des_in/
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+copy sys_des_in\.env.example sys_des_in\.env   # then edit keys
+```
 
 ## Run
 
-### Option A — ADK web UI (recommended for exploring)
-
-From the project root (the folder *containing* `sys_des_in`):
+### Option A — ADK web UI
 
 ```bash
 adk web
 ```
 
-Pick `sys_des_in` in the agent dropdown, then send a message like
-`Design a URL shortener for a startup`. The pipeline runs end to end and writes
-the seven files to `sys_des_in/design_outputs/<workspace>/`.
+Pick `sys_des_in`, chat with the coordinator. When it has enough detail it
+runs the pipeline and writes files under `sys_des_in/design_outputs/`.
 
-### Option B — CLI runner
-
-From the project root:
+### Option B — Multi-turn CLI (this project's runner)
 
 ```bash
+python -m sys_des_in.runner
+# or with an opening message:
 python -m sys_des_in.runner "Design a URL shortener for a startup"
 ```
 
-### Option C — ADK API server
+Type answers at the `You>` prompt (visible, after each turn fully finishes).
+Quit with `quit` / `exit` / `q`.
+
+### Option C — ADK built-in CLI
+
+```bash
+adk run sys_des_in
+```
+
+### Option D — API server
 
 ```bash
 adk api_server
@@ -142,32 +155,18 @@ adk api_server
 
 ## Output
 
-For a problem like "URL shortener for a startup", you'll get:
-
 ```
-sys_des_in/design_outputs/url-shortener-for-a-startup/
+sys_des_in/design_outputs/<workspace>/
 ├── 00-index.md
 ├── 01-requirements.md
-├── 02-architecture.md
-├── 03-api.md
-├── 04-data-model.md
-├── 05-component-design.md
-├── 06-resilience.md
+├── ...
 └── 07-security-ops.md
 ```
 
-## Notes on calibration
+## Notes
 
-The coordinator picks a **maturity level** — `interview`, `mvp`, or
-`production` — from the user's framing, and every specialist calibrates its
-depth to that level. An `interview`-level URL shortener won't get Kafka and
-multi-region replication; a `production`-level video platform will. The
-Reasoning footers make those scope decisions explicit and auditable.
-
-## Next ideas
-
-- A `LoopAgent` review pass that checks cross-document consistency and rewrites
-  conflicting sections.
-- Human-in-the-loop confirmation at the coordinator step before spending tokens
-  on seven docs.
-- A "generate only sections X–Y" mode for partial runs.
+- Maturity (`interview` / `mvp` / `production`) calibrates how heavy the design
+  is; Reasoning footers make omissions explicit.
+- Prefer models with solid tool-calling for OpenRouter (cheap models may skip
+  `write_design_doc`).
+- Do not commit `.env`. Rotate keys if they leak.

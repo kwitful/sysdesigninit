@@ -1,25 +1,20 @@
-"""Definition of every agent in the system-design pipeline.
+"""Definition of every agent in the system-design assistant.
 
-The pipeline is a single ``SequentialAgent`` (the ``root_agent``) whose
-sub-agents are a mix of ``LlmAgent`` specialists and two ``ParallelAgent``
-groups:
+Architecture (ADK-aligned):
 
-    1. coordinator            (LlmAgent)        -> design_context
-    2. requirements_agent     (LlmAgent)        -> 01-requirements.md
-    3. architecture_agent     (LlmAgent)        -> 02-architecture.md
-    4. api_and_data           (ParallelAgent)
-         - api_agent                              -> 03-api.md
-         - data_agent                              -> 04-data-model.md
-    5. component_agent        (LlmAgent)        -> 05-component-design.md
-    6. hardening              (ParallelAgent)
-         - resilience_agent                        -> 06-resilience.md
-         - security_agent                          -> 07-security-ops.md
-    7. index_agent            (LlmAgent)        -> 00-index.md
+* ``root_agent`` is a conversational ``LlmAgent`` (the coordinator). It
+  clarifies with the user across turns, then invokes the document pipeline
+  via ``AgentTool`` — never while still waiting for answers.
+* ``design_pipeline`` is a ``SequentialAgent`` of specialists (+ two
+  ``ParallelAgent`` groups) that writes the eight markdown files.
 
-Each specialist agent has an ``output_key`` so its full markdown lands in shared
-session state, and downstream agents reference those keys via ``{key}``
-substitution in their instructions. Every specialist also has the file tools
-available so it can persist its document to disk.
+Session state handoff (via ToolContext tools):
+
+* ``workspace`` — set by ``init_design_workspace``
+* ``design_context`` — set by ``save_design_context``
+
+Models come from ``sys_des_in.models.get_model()`` (Gemini by default, or
+OpenRouter / LiteLLM via ADK's ``LiteLlm`` wrapper).
 """
 
 from __future__ import annotations
@@ -31,10 +26,13 @@ from google.adk.agents import (
     ParallelAgent,
     SequentialAgent,
 )
+from google.adk.tools import agent_tool
 from google.adk.tools.function_tool import FunctionTool
 
+from ..models import get_model
 from ..tools import (
     init_design_workspace,
+    save_design_context,
     write_design_doc,
     read_design_doc,
     list_design_docs,
@@ -46,16 +44,10 @@ from .prompts import (
     build_index_instruction,
 )
 
-# All agents share the same model. `gemini-flash-latest` is an alias that
-# always points to the current Flash model (per ADK quickstart docs). Fast and
-# cheap enough for the orchestrator; specialists do the heavy lifting.
-_MODEL = "gemini-flash-latest"
+# Resolve once at import time so every agent shares the same configured model.
+_MODEL = get_model()
 
-# The file tools every specialist gets. ADK wraps plain functions into
-# FunctionTool instances automatically when passed via the `tools` list, but we
-# wrap explicitly for clarity and to keep type checkers happy.
 _FILE_TOOLS = [
-    FunctionTool(func=init_design_workspace),
     FunctionTool(func=write_design_doc),
     FunctionTool(func=read_design_doc),
     FunctionTool(func=list_design_docs),
@@ -71,11 +63,13 @@ def _sanitize_name(title: str) -> str:
 def _build_specialist(spec_index: int, prior_keys: list[str]) -> Agent:
     """Construct one specialist LlmAgent from SECTION_SPECS."""
     filename, output_key, title, schema_body = SECTION_SPECS[spec_index]
+    # Always surface workspace so write_design_doc gets a concrete name.
+    keys = list(dict.fromkeys(["workspace", *prior_keys]))
     instruction = build_specialist_instruction(
         section_title=title,
         schema_body=schema_body,
         filename=filename,
-        prior_context_keys=prior_keys,
+        prior_context_keys=keys,
     )
     return Agent(
         name=_sanitize_name(title),
@@ -87,20 +81,7 @@ def _build_specialist(spec_index: int, prior_keys: list[str]) -> Agent:
     )
 
 
-# --- Coordinator -----------------------------------------------------------
-coordinator_agent = Agent(
-    name="design_coordinator",
-    model=_MODEL,
-    description=(
-        "Runs first. Clarifies scope, scale, and maturity, creates the "
-        "workspace, and emits a compact design context for the specialists."
-    ),
-    instruction=COORDINATOR_OUTPUT_CONTRACT,
-    tools=[FunctionTool(func=init_design_workspace)],
-    output_key="design_context",
-)
-
-# --- Specialists (built in pipeline order) ---------------------------------
+# --- Specialists (pipeline order) ------------------------------------------
 requirements_agent = _build_specialist(0, prior_keys=["design_context"])
 
 architecture_agent = _build_specialist(
@@ -144,7 +125,6 @@ security_agent = _build_specialist(
     ],
 )
 
-# --- Parallel groups -------------------------------------------------------
 api_and_data = ParallelAgent(
     name="api_and_data_parallel",
     sub_agents=[api_agent, data_agent],
@@ -157,7 +137,6 @@ hardening = ParallelAgent(
     description="Writes the resilience and security/ops documents in parallel.",
 )
 
-# --- Final index agent -----------------------------------------------------
 index_agent = Agent(
     name="index_agent",
     model=_MODEL,
@@ -170,19 +149,41 @@ index_agent = Agent(
     output_key="index_doc",
 )
 
-# --- Root orchestrator -----------------------------------------------------
-# A SequentialAgent runs its sub_agents in order, passing the same invocation
-# context (and thus the same session state) through the chain. The two
-# ParallelAgent groups fan out where the work is independent.
-root_agent = SequentialAgent(
-    name="system_design_pipeline",
+# Document pipeline only — no conversational coordinator inside.
+# Invoked by the root coordinator through AgentTool after the brief is saved.
+design_pipeline = SequentialAgent(
+    name="run_design_pipeline",
+    description=(
+        "Generate all system-design markdown documents (requirements, "
+        "architecture, API, data model, component design, resilience, "
+        "security/ops, and index). Call ONLY after init_design_workspace and "
+        "save_design_context have succeeded. Reads design_context and "
+        "workspace from session state; takes no useful arguments."
+    ),
     sub_agents=[
-        coordinator_agent,
         requirements_agent,
         architecture_agent,
         api_and_data,
         component_agent,
         hardening,
         index_agent,
+    ],
+)
+
+_pipeline_tool = agent_tool.AgentTool(agent=design_pipeline)
+
+# --- Root: conversational coordinator --------------------------------------
+root_agent = Agent(
+    name="design_coordinator",
+    model=_MODEL,
+    description=(
+        "System-design assistant. Clarifies scope with the user, then runs "
+        "the document pipeline to write detailed markdown design docs."
+    ),
+    instruction=COORDINATOR_OUTPUT_CONTRACT,
+    tools=[
+        FunctionTool(func=init_design_workspace),
+        FunctionTool(func=save_design_context),
+        _pipeline_tool,
     ],
 )

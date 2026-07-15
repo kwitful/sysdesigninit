@@ -1,8 +1,8 @@
 """ADK entry point.
 
-ADK looks for a module-level ``root_agent`` here. The real pipeline
-(coordinator + seven specialists + two parallel groups + index agent) is
-constructed in :mod:`sys_des_in.agents.orchestrator`.
+ADK looks for a module-level ``root_agent`` here. That agent is the
+conversational coordinator; the markdown pipeline is invoked via AgentTool
+(see :mod:`sys_des_in.agents.orchestrator`).
 """
 from .agents import root_agent
 
