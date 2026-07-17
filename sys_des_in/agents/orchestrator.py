@@ -1,20 +1,17 @@
 """Definition of every agent in the system-design assistant.
 
-Architecture (ADK-aligned):
+Pipeline order (``design_pipeline`` SequentialAgent):
 
-* ``root_agent`` is a conversational ``LlmAgent`` (the coordinator). It
-  clarifies with the user across turns, then invokes the document pipeline
-  via ``AgentTool`` — never while still waiting for answers.
-* ``design_pipeline`` is a ``SequentialAgent`` of specialists (+ two
-  ``ParallelAgent`` groups) that writes the eight markdown files.
-
-Session state handoff (via ToolContext tools):
-
-* ``workspace`` — set by ``init_design_workspace``
-* ``design_context`` — set by ``save_design_context``
-
-Models come from ``sys_des_in.models.get_model()`` (Gemini by default, or
-OpenRouter / LiteLLM via ADK's ``LiteLlm`` wrapper).
+1. problem_brief        → 00-problem-brief.md
+2. requirements         → 01-requirements.md
+3. architecture         → 02-architecture.md
+4. api_and_data         → 03-api.md, 04-data-model.md (parallel)
+5. component            → 05-component-design.md
+6. hardening            → 06-resilience.md, 07-security-ops.md (parallel)
+7. decisions_log        → 08-decisions-log.md
+8. capacity             → 09-capacity-estimates.md
+9. review               → 00-review.md
+10. index               → 00-index.md
 """
 
 from __future__ import annotations
@@ -39,12 +36,12 @@ from ..tools import (
 )
 from .prompts import (
     COORDINATOR_OUTPUT_CONTRACT,
+    EXTRA_SPECS,
     SECTION_SPECS,
     build_specialist_instruction,
     build_index_instruction,
 )
 
-# Resolve once at import time so every agent shares the same configured model.
 _MODEL = get_model()
 
 _FILE_TOOLS = [
@@ -55,50 +52,75 @@ _FILE_TOOLS = [
 
 
 def _sanitize_name(title: str) -> str:
-    """Turn a section title into a valid Python-identifier agent name."""
     name = re.sub(r"[^a-zA-Z0-9]+", "_", title).strip("_").lower()
     return f"{name}_agent"
 
 
-def _build_specialist(spec_index: int, prior_keys: list[str]) -> Agent:
-    """Construct one specialist LlmAgent from SECTION_SPECS."""
-    filename, output_key, title, schema_body = SECTION_SPECS[spec_index]
-    # Always surface workspace so write_design_doc gets a concrete name.
-    keys = list(dict.fromkeys(["workspace", *prior_keys]))
+def _build_from_spec(
+    filename: str,
+    output_key: str,
+    title: str,
+    schema_body: str,
+    prior_keys: list[str],
+    *,
+    include_focus_hint: bool = True,
+) -> Agent:
+    keys = list(dict.fromkeys(["workspace", "design_context", *prior_keys]))
     instruction = build_specialist_instruction(
         section_title=title,
         schema_body=schema_body,
         filename=filename,
         prior_context_keys=keys,
+        include_focus_hint=include_focus_hint,
     )
     return Agent(
         name=_sanitize_name(title),
         model=_MODEL,
-        description=f"Writes the {title} markdown document for a system design.",
+        description=f"Writes {filename} for a system design.",
         instruction=instruction,
         tools=_FILE_TOOLS,
         output_key=output_key,
     )
 
 
-# --- Specialists (pipeline order) ------------------------------------------
-requirements_agent = _build_specialist(0, prior_keys=["design_context"])
+def _build_section(spec_index: int, prior_keys: list[str]) -> Agent:
+    filename, output_key, title, schema_body = SECTION_SPECS[spec_index]
+    return _build_from_spec(filename, output_key, title, schema_body, prior_keys)
 
-architecture_agent = _build_specialist(
-    1, prior_keys=["design_context", "requirements_doc"]
+
+def _build_extra(spec_index: int, prior_keys: list[str], **kwargs) -> Agent:
+    filename, output_key, title, schema_body = EXTRA_SPECS[spec_index]
+    return _build_from_spec(
+        filename, output_key, title, schema_body, prior_keys, **kwargs
+    )
+
+
+# --- Pipeline agents -------------------------------------------------------
+_BASE_PRIOR = ["problem_brief_doc"]
+
+problem_brief_agent = _build_extra(
+    0,
+    prior_keys=[],
+    include_focus_hint=False,
 )
 
-api_agent = _build_specialist(
-    2, prior_keys=["design_context", "requirements_doc", "architecture_doc"]
-)
-data_agent = _build_specialist(
-    3, prior_keys=["design_context", "requirements_doc", "architecture_doc"]
+requirements_agent = _build_section(0, prior_keys=_BASE_PRIOR)
+
+architecture_agent = _build_section(
+    1, prior_keys=[*_BASE_PRIOR, "requirements_doc"]
 )
 
-component_agent = _build_specialist(
+api_agent = _build_section(
+    2, prior_keys=[*_BASE_PRIOR, "requirements_doc", "architecture_doc"]
+)
+data_agent = _build_section(
+    3, prior_keys=[*_BASE_PRIOR, "requirements_doc", "architecture_doc"]
+)
+
+component_agent = _build_section(
     4,
     prior_keys=[
-        "design_context",
+        *_BASE_PRIOR,
         "requirements_doc",
         "architecture_doc",
         "api_doc",
@@ -106,79 +128,110 @@ component_agent = _build_specialist(
     ],
 )
 
-resilience_agent = _build_specialist(
+resilience_agent = _build_section(
     5,
     prior_keys=[
-        "design_context",
+        *_BASE_PRIOR,
         "requirements_doc",
         "architecture_doc",
         "component_doc",
     ],
 )
-security_agent = _build_specialist(
+security_agent = _build_section(
     6,
     prior_keys=[
-        "design_context",
+        *_BASE_PRIOR,
         "requirements_doc",
         "architecture_doc",
         "component_doc",
+    ],
+)
+
+decisions_agent = _build_extra(
+    1,
+    prior_keys=[
+        *_BASE_PRIOR,
+        "requirements_doc",
+        "architecture_doc",
+        "api_doc",
+        "data_doc",
+        "component_doc",
+        "resilience_doc",
+        "security_ops_doc",
+    ],
+)
+
+capacity_agent = _build_extra(
+    2,
+    prior_keys=[
+        *_BASE_PRIOR,
+        "requirements_doc",
+        "decisions_doc",
     ],
 )
 
 api_and_data = ParallelAgent(
     name="api_and_data_parallel",
     sub_agents=[api_agent, data_agent],
-    description="Writes the API and data-model documents in parallel.",
+    description="Writes API and data-model documents in parallel.",
 )
 
 hardening = ParallelAgent(
     name="hardening_parallel",
     sub_agents=[resilience_agent, security_agent],
-    description="Writes the resilience and security/ops documents in parallel.",
+    description="Writes resilience and security/ops documents in parallel.",
 )
 
 index_agent = Agent(
     name="index_agent",
     model=_MODEL,
-    description=(
-        "Runs last. Reads the seven section files and writes a 00-index.md "
-        "that ties the whole design together."
-    ),
+    description="Writes 00-index.md linking all design documents.",
     instruction=build_index_instruction(),
     tools=_FILE_TOOLS,
     output_key="index_doc",
 )
 
-# Document pipeline only — no conversational coordinator inside.
-# Invoked by the root coordinator through AgentTool after the brief is saved.
+review_agent = _build_extra(
+    3,
+    prior_keys=[
+        *_BASE_PRIOR,
+        "requirements_doc",
+        "architecture_doc",
+        "decisions_doc",
+        "capacity_doc",
+        "index_doc",
+    ],
+    include_focus_hint=False,
+)
+
 design_pipeline = SequentialAgent(
     name="run_design_pipeline",
     description=(
-        "Generate all system-design markdown documents (requirements, "
-        "architecture, API, data model, component design, resilience, "
-        "security/ops, and index). Call ONLY after init_design_workspace and "
-        "save_design_context have succeeded. Reads design_context and "
-        "workspace from session state; takes no useful arguments."
+        "Generate all system-design markdown documents. Call ONLY after "
+        "init_design_workspace and save_design_context succeed."
     ),
     sub_agents=[
+        problem_brief_agent,
         requirements_agent,
         architecture_agent,
         api_and_data,
         component_agent,
         hardening,
+        decisions_agent,
+        capacity_agent,
+        review_agent,
         index_agent,
     ],
 )
 
 _pipeline_tool = agent_tool.AgentTool(agent=design_pipeline)
 
-# --- Root: conversational coordinator --------------------------------------
 root_agent = Agent(
     name="design_coordinator",
     model=_MODEL,
     description=(
-        "System-design assistant. Clarifies scope with the user, then runs "
-        "the document pipeline to write detailed markdown design docs."
+        "System-design assistant. Clarifies scope, then runs the document "
+        "pipeline."
     ),
     instruction=COORDINATOR_OUTPUT_CONTRACT,
     tools=[

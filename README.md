@@ -23,24 +23,24 @@ root_agent (LlmAgent: design_coordinator)     ← talks to the user
             │
             ▼
 run_design_pipeline (SequentialAgent)         ← only after brief is saved
-  1. requirements_agent        → 01-requirements.md
-  2. architecture_agent        → 02-architecture.md
-  3. api_and_data (ParallelAgent)
-        ├─ api_agent           → 03-api.md
-        └─ data_agent          → 04-data-model.md
-  4. component_agent           → 05-component-design.md
-  5. hardening (ParallelAgent)
-        ├─ resilience_agent    → 06-resilience.md
-        └─ security_agent      → 07-security-ops.md
-  6. index_agent               → 00-index.md
+  1. problem_brief           → 00-problem-brief.md (+ Focus Map)
+  2. requirements_agent      → 01-requirements.md
+  3. architecture_agent      → 02-architecture.md
+  4. api_and_data (ParallelAgent)
+        ├─ api_agent         → 03-api.md
+        └─ data_agent        → 04-data-model.md
+  5. component_agent         → 05-component-design.md
+  6. hardening (ParallelAgent)
+        ├─ resilience_agent  → 06-resilience.md
+        └─ security_agent    → 07-security-ops.md
+  7. decisions_log           → 08-decisions-log.md
+  8. capacity                → 09-capacity-estimates.md
+  9. review                  → 00-review.md (specificity critique)
+ 10. index                   → 00-index.md
 ```
 
-- Clarification happens **before** the pipeline. The coordinator asks at most
-  one question per turn and waits; it does not start writing docs until you
-  answer.
-- Handoff uses ADK `ToolContext` state + `AgentTool` (documented ADK patterns).
-- Specialists share prior outputs via `{key}` instruction substitution and
-  `output_key`.
+Specialists share **anti-generic rules** (concrete examples, rejected
+alternatives, tie to Critical Flows) and read the problem brief Focus Map.
 
 ## Models (Gemini or OpenRouter)
 
@@ -157,10 +157,18 @@ adk api_server
 
 ```
 sys_des_in/design_outputs/<workspace>/
+├── 00-problem-brief.md    # anchor + Focus Map per section
 ├── 00-index.md
+├── 00-review.md           # specificity critique
 ├── 01-requirements.md
-├── ...
-└── 07-security-ops.md
+├── 02-architecture.md
+├── 03-api.md
+├── 04-data-model.md
+├── 05-component-design.md
+├── 06-resilience.md
+├── 07-security-ops.md
+├── 08-decisions-log.md
+└── 09-capacity-estimates.md
 ```
 
 ## Notes

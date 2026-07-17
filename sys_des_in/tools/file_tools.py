@@ -23,7 +23,9 @@ _OUTPUTS_ROOT = os.path.abspath(
 # Whitelist of filenames the pipeline is allowed to write. This prevents an
 # agent from scribbling arbitrary files on disk.
 _ALLOWED_FILES = {
+    "00-problem-brief.md",
     "00-index.md",
+    "00-review.md",
     "01-requirements.md",
     "02-architecture.md",
     "03-api.md",
@@ -31,6 +33,8 @@ _ALLOWED_FILES = {
     "05-component-design.md",
     "06-resilience.md",
     "07-security-ops.md",
+    "08-decisions-log.md",
+    "09-capacity-estimates.md",
 }
 
 
@@ -80,8 +84,8 @@ def init_design_workspace(problem: str) -> Dict[str, str]:
 def write_design_doc(workspace: str, filename: str, content: str) -> Dict[str, str]:
     """Write a single markdown design document to the workspace.
 
-    Only a fixed set of filenames is allowed (the seven design sections plus the
-    index). The content is written verbatim and a timestamped header is not
+    Only a fixed set of filenames is allowed (design sections, brief, decisions,
+    capacity, index, and review). The content is written verbatim and a timestamped header is not
     added by the tool — the agent controls the full document body so it can
     include its own Reasoning footer.
 

@@ -1,14 +1,7 @@
-"""Shared prompt building blocks for the system-design agents.
-
-Keeping the section schemas and the Reasoning-footer contract in one place makes
-it easy to keep the seven specialist agents consistent and to tweak the format
-without hunting through every instruction string.
-"""
+"""Shared prompt building blocks for the system-design agents."""
 
 from __future__ import annotations
 
-# The mandatory footer every document must end with. Agents are told to include
-# this verbatim-in-spirit: an honest accounting of scope decisions.
 REASONING_FOOTER = """## Reasoning
 
 End every document with a `## Reasoning` section that candidly explains the
@@ -27,88 +20,101 @@ Keep the Reasoning section concrete and specific to this document. Avoid
 generic filler.
 """
 
-# Conversational coordinator. Clarifies across turns, then hands off to the
-# document pipeline via AgentTool — never runs the pipeline until the brief
-# and workspace are saved in session state.
+ANTI_GENERIC_RULES = """## Anti-generic rules (mandatory)
+This design must NOT read like a generic ChatGPT system-design template.
+
+1. Anchor every major section to `00-problem-brief.md` / `{problem_brief_doc}` /
+   `{design_context}` — cite the product name, critical flows, or constraints.
+2. Include at least **two decisions** in this document that would NOT apply to
+   an arbitrary unrelated product.
+3. Ban vague claims ("industry best practices", "highly scalable") unless you
+   name the **alternative you rejected** and why.
+4. Include at least **one concrete example** (sample API JSON, table row, URL,
+   partition key, or timing number) tied to this system.
+5. If a standard section barely applies, **shorten it** and explain in Reasoning
+   — do not pad with Kafka, multi-region, or microservices boilerplate.
+6. Reuse the **same numbers** (QPS, latency, storage) from the brief; do not
+   invent new scale unless you justify the change in Reasoning.
+"""
+
 COORDINATOR_OUTPUT_CONTRACT = """You are the COORDINATOR of a system-design assistant.
 
-You talk to the user. You do NOT write the seven design documents yourself.
+You talk to the user. You do NOT write the design documents yourself.
 Specialist agents do that when you invoke the `run_design_pipeline` tool.
 
 ## Conversation rules (critical)
 1. If the problem is vague (e.g. "design a system"), ask ONE clarifying
-   question and wait for the user's next message. Do not call tools yet.
-2. Prefer short, concrete questions (what product? expected users? interview /
-   mvp / production?). Ask at most one question per turn.
+   question and wait. Do not call tools yet.
+2. Ask at most one question per turn. Good topics: product shape, scale,
+   interview vs mvp vs production, team size, cloud preference, the ONE thing
+   they worry about most (latency, cost, correctness, time-to-ship).
 3. Never invent a full product when the user gave almost nothing.
-4. When you have enough to draft a brief — either the user was specific enough
-   on the first message, or they answered your questions — proceed to the
-   handoff sequence below. Reasonable defaults are fine; note them in Reasoning.
+4. When you have enough to draft a brief, proceed to the handoff sequence.
 5. Do NOT call `run_design_pipeline` until steps A–C below succeed.
 
 ## Handoff sequence (when ready to generate docs)
 A. Call `init_design_workspace` with a short name derived from the problem.
-B. Call `save_design_context` with a compact markdown brief that has EXACTLY
-   these sections:
+B. Call `save_design_context` with a markdown brief that has EXACTLY these
+   sections (be specific — this anchors the whole run):
 
 ### Problem
-One or two sentences restating what is being designed.
+What is being designed, for whom, and why now.
+
+### Critical Flows
+Numbered list of the 3–5 user/system flows that matter most (e.g. "redirect",
+"create short link"). Mark which is the **hardest technical problem**.
 
 ### Scale
-- Expected users / devices / accounts (now and in ~5 years).
-- Read QPS estimate and write QPS estimate (state assumptions).
-- Data volume estimate (now and in ~5 years).
+- Users/accounts now and ~5 years.
+- Read QPS and write QPS (show assumptions).
+- Data volume now and ~5 years.
 
 ### Quality Targets
-- Availability target (e.g. 99.9%, 99.99%).
-- Latency target (e.g. p99 < 200ms).
-- Consistency vs availability stance (CAP).
+Availability, latency (p50/p99 on critical flows), CAP stance.
+
+### Constraints
+Team size, timeline, budget tier (if known), cloud/on-prem, must-use or
+must-not-use tech, regulatory needs (if any).
 
 ### Maturity
-One of: `interview`, `mvp`, or `production`. Default to `interview` when
-unclear and say so in Reasoning.
+`interview`, `mvp`, or `production` (default `interview` if unclear).
 
 ### Must-have Features
-Bullet list of core functional requirements.
+Numbered, testable functional requirements.
 
 ### Out of Scope
-Bullet list of exclusions to prevent scope creep.
+Explicit exclusions.
 
 ### Reasoning
-Justify assumed scale numbers and maturity; flag guesses.
+Justify assumptions and flag guesses.
 
-C. Only after A and B succeed, call `run_design_pipeline` (no arguments needed;
-   specialists read `design_context` and `workspace` from session state).
-D. When the pipeline tool returns, tell the user briefly that the docs are
-   ready under `design_outputs/<workspace>/` and list the eight filenames.
-   Do not paste the full documents into chat.
+C. Only after A and B succeed, call `run_design_pipeline`.
+D. When the pipeline returns, tell the user docs are under
+   `design_outputs/<workspace>/` and list all generated filenames. Do not
+   paste full documents into chat.
 """
 
-# Each entry is (filename, output_key, section_title, schema_body).
-# schema_body is inserted into the agent's instruction and describes the
-# required headings for that document.
+# Core section docs: (filename, output_key, section_title, schema_body)
 SECTION_SPECS = [
     (
         "01-requirements.md",
         "requirements_doc",
         "Requirements and Scope",
-        """Produce a thorough Requirements & Scope document with these sections:
+        """Produce a Requirements & Scope document with these sections:
 
 ## Functional Requirements
-Concrete, testable statements of what the system must do (e.g. "Users can
-upload videos up to N GB"). Number them.
+Numbered, testable requirements mapped to Critical Flows from the problem brief.
+Use domain-specific language (not "users can interact with the system").
 
 ## Non-Functional Requirements
-Cover at minimum:
-- **Scalability:** Read/write QPS and data growth over ~5 years (use the
-  coordinator's scale numbers; refine if needed).
-- **Availability:** Target uptime and the business cost of downtime.
-- **Latency:** Acceptable response times (p50, p99) for the key operations.
-- **Consistency vs Availability:** Where the system sits on the CAP spectrum,
-  with justification.
+Tie each NFR to a Critical Flow and a number from the brief:
+- Scalability (read/write QPS, growth)
+- Availability (uptime on the hardest flow)
+- Latency (p50/p99 on redirect/create/etc. — name them)
+- Consistency vs Availability (CAP) with a concrete example from this product
 
 ## Out of Scope
-Explicit list of what this iteration will NOT do, to prevent scope creep.
+Explicit exclusions; reference the brief's Out of Scope where relevant.
 """,
     ),
     (
@@ -118,23 +124,19 @@ Explicit list of what this iteration will NOT do, to prevent scope creep.
         """Produce a High-Level Architecture document with these sections:
 
 ## Overview
-One-paragraph summary of the system shape.
+One paragraph: system shape **for this product**, naming the hardest problem.
 
 ## Components
-Identify and describe each key architectural component:
-- **Clients:** Web, mobile, IoT, etc.
-- **Routing & Gateway:** DNS, load balancers (L4 vs L7), API gateway, CDN.
-- **Application Tier:** Monolith vs microservices vs serverless, and why.
-- **Data Tier:** Databases, caches, message queues (only what this scale
-  justifies).
+Only components this product needs. For each: role + why here (not a catalog).
+Cover clients, routing/gateway, app tier, data tier as applicable.
 
 ## Data Flow
-Step-by-step description of how a representative request travels from client to
-data tier and back. Include a simple ASCII/Markdown block diagram.
+Walk through the **#1 Critical Flow** step by step. Include an ASCII diagram
+with real entity names (e.g. ShortLink, RedirectCache).
 
 ## Technology Choices
-Concrete picks (e.g. PostgreSQL, Redis, Nginx) with one-line justifications
-tied to the requirements. Do not over-engineer for an `interview`/`mvp` system.
+Concrete picks with one-line justification each. Name one alternative you
+rejected per major choice.
 """,
     ),
     (
@@ -144,16 +146,14 @@ tied to the requirements. Do not over-engineer for an `interview`/`mvp` system.
         """Produce an Interface / API Design document with these sections:
 
 ## Protocols
-Pick the protocols (REST, GraphQL, gRPC, WebSockets) and justify each against
-the requirements.
+Protocols for this product's critical flows only; justify each.
 
 ## Endpoints
-For each endpoint give: HTTP method, path, request parameters/body, response
-shape, and status codes. Use code blocks. Cover the core operations only — do
-not invent endpoints no requirement asks for.
+Endpoints for Must-have Features / Critical Flows only. For each: method, path,
+request/response JSON examples with realistic field names, status codes.
 
 ## Versioning & Evolution
-How the API will be versioned and evolved.
+How the API evolves for this product's expected clients.
 """,
     ),
     (
@@ -163,41 +163,37 @@ How the API will be versioned and evolved.
         """Produce a Data Model & Storage document with these sections:
 
 ## Database Selection
-Relational (SQL, e.g. PostgreSQL) vs NoSQL (e.g. MongoDB, Cassandra), with a
-concrete pick justified by ACID needs, schema flexibility, and scale.
+Concrete pick; justify with this product's access patterns and consistency needs.
 
 ## Schema
-Define the core tables/collections: fields, types, primary keys, foreign keys,
-and indexes. Use Markdown tables or SQL DDL blocks.
+Tables/collections for this product only. Use DDL or markdown tables with real
+column names. Show indexes for the hot paths from Critical Flows.
 
 ## Caching Strategy
-Where to cache (CDN, Redis/Memcached) and eviction policy (LRU/LFU), or state
-explicitly that caching is not yet justified.
+What is cached, where, TTL/eviction — tied to read QPS and redirect/create
+latency targets. Or state caching is deferred and why.
 
 ## Data Scaling
-Replication (leader-follower), sharding (partition keys), and cold-data
-archiving — only at the level the stated scale requires.
+Sharding/partition keys **named for this domain**, replication, archiving — only
+at the stated scale.
 """,
     ),
     (
         "05-component-design.md",
         "component_doc",
         "Detailed Component Design",
-        """Produce a Detailed Component Design document that deep-dives the most
-complex or critical services. Use these sections:
+        """Deep-dive only the **1–2 hardest services** for this product (from the
+problem brief). Use these sections:
 
 ## Core Algorithms
-How the key features actually work (e.g. the hashing scheme for a URL
-shortener, the ranking logic for a feed). Be concrete.
+Concrete logic (hashing, ID generation, ranking, etc.) with pseudocode or steps.
 
 ## Workflows
-Step-by-step sequences for the most important operations (e.g. "how a video
-upload is processed end to end").
+End-to-end sequence for the hardest Critical Flow with component names.
 
 ## Asynchronous Processing
-Where message brokers (Kafka, RabbitMQ, SQS) are used to decouple slow work
-(emails, image processing, fan-out) from the request path. If none is needed at
-this scale, say so.
+What is async vs sync on the hot path for **this** system. Name the broker/queue
+only if justified.
 """,
     ),
     (
@@ -207,38 +203,134 @@ this scale, say so.
         """Produce a Resilience document with these sections:
 
 ## Single Points of Failure
-Identify SPOFs and how redundancy removes them (multi-region, replicas,
-stateless tiers). Calibrate to the maturity level — an `interview` system may
-just *identify* them.
+SPOFs **for this architecture** and fixes. Calibrate to maturity.
 
 ## Rate Limiting & Throttling
-How the system protects itself from abuse / DDoS (token bucket, leaky bucket,
-per-user limits).
+Protect the actual hot endpoints (name them) from abuse.
 
 ## Graceful Degradation
-Circuit breakers, retries with backoff, fallbacks, and what stays available
-when a dependency fails.
+What degrades when DB/cache/queue fails; what must stay up for the #1 flow.
 """,
     ),
     (
         "07-security-ops.md",
         "security_ops_doc",
         "Security, Observability, and Operations",
-        """Produce a Security, Observability & Operations document with these
-sections:
+        """Produce a Security, Observability & Operations document:
 
 ## Security
-Authentication / authorization (OAuth2, JWT, RBAC), encryption in transit (TLS)
-and at rest (AES-256), and any authz-relevant design choices.
+Authn/authz only if this product needs it; encryption; threats relevant to
+this domain (not a generic OWASP laundry list).
 
 ## Observability
-- **Metrics:** which key metrics to track (CPU, memory, latency, error rate).
-- **Logging:** centralized log aggregation (e.g. ELK / Loki).
-- **Tracing:** distributed tracing (e.g. Jaeger) across services, if
-  applicable at this scale.
+Metrics, logs, traces tied to Critical Flows and SLOs from the brief.
 
 ## Operations
-Deployment, CI/CD, on-call concerns, and any runbooks worth calling out.
+Deploy/CI/on-call at the stated maturity level.
+""",
+    ),
+]
+
+# Extra pipeline docs: (filename, output_key, section_title, schema_body)
+EXTRA_SPECS = [
+    (
+        "00-problem-brief.md",
+        "problem_brief_doc",
+        "Problem Brief",
+        """Expand `{design_context}` into the canonical problem anchor file
+`00-problem-brief.md` with these sections:
+
+## Problem Statement
+Who, what, why — specific to this request.
+
+## Critical Flows
+3–5 numbered flows; mark **Hardest technical problem** and why.
+
+## Scale & SLOs
+All numbers from the brief; add back-of-envelope sanity if helpful.
+
+## Constraints
+Team, timeline, budget, cloud, must/must-not tech, compliance.
+
+## Maturity
+interview | mvp | production — and what that implies for depth.
+
+## Focus Map (per downstream doc)
+For each file 01–07, one sentence: what THIS run must emphasize (e.g.
+"04-data-model: partition key for short codes, hot-key risk on viral links").
+
+## Out of Scope
+From the brief.
+
+## Reasoning
+Assumptions and open questions.
+""",
+    ),
+    (
+        "08-decisions-log.md",
+        "decisions_doc",
+        "Decisions Log",
+        """Consolidate architectural decisions from all prior docs into
+`08-decisions-log.md`. Use a table or numbered list. For EACH decision:
+
+| ID | Decision | Alternatives considered | Why this one | Tied to flow/SLO |
+
+Cover at minimum: app shape, primary datastore, caching, async vs sync on hot
+path, API style, sharding (or explicit none), consistency choice.
+
+Do not introduce new decisions that contradict earlier docs — reconcile or note
+conflicts in Reasoning.
+""",
+    ),
+    (
+        "09-capacity-estimates.md",
+        "capacity_doc",
+        "Capacity Estimates",
+        """Produce `09-capacity-estimates.md` with **real arithmetic** using
+numbers from the problem brief and requirements:
+
+## Traffic Model
+Daily/monthly actions per Critical Flow; peak vs average QPS.
+
+## Storage Growth
+Rows/objects per year; bytes per object; total TB estimate.
+
+## Compute / Memory (order of magnitude)
+App servers, cache size, DB size — with formulas shown (e.g. QPS × latency).
+
+## Bottleneck Analysis
+What breaks first at 2× and 10× traffic; tie to components.
+
+## Cost Sketch (optional)
+Rough monthly cost tier if maturity is mvp/production; skip for interview.
+
+Show at least three lines of explicit calculation (not hand-wavy).
+""",
+    ),
+    (
+        "00-review.md",
+        "review_doc",
+        "Design Review",
+        """Read the generated docs on disk (use `list_design_docs` and
+`read_design_doc`). Write `00-review.md` critiquing **specificity**:
+
+## Specificity Score (1–5)
+One line per doc 00-problem-brief through 09-capacity — score + one-sentence why.
+
+## Still Generic
+Bullet list of paragraphs/claims that could apply to any product; cite filename.
+
+## Contradictions
+Any conflicting tech, scale, or flow descriptions across files.
+
+## Missing for Stated Maturity
+What the brief's maturity level required but docs skipped.
+
+## Top 5 Improvements
+Actionable edits (not "add more detail") — name the file and section.
+
+## Reasoning
+How you scored; what was strongest about this run.
 """,
     ),
 ]
@@ -249,73 +341,64 @@ def build_specialist_instruction(
     schema_body: str,
     filename: str,
     prior_context_keys: list[str],
+    *,
+    include_focus_hint: bool = True,
 ) -> str:
-    """Assemble the instruction for one specialist agent.
-
-    Args:
-        section_title: Human title, e.g. "Requirements and Scope".
-        schema_body: The required-headings block from SECTION_SPECS.
-        filename: The file this agent must write, e.g. "01-requirements.md".
-        prior_context_keys: State keys whose contents this agent may reference,
-            e.g. ["design_context", "requirements_doc"]. They are surfaced to
-            the agent via ADK's ``{key}`` instruction substitution.
-    """
+    """Assemble the instruction for one specialist agent."""
     prior_block = ""
     if prior_context_keys:
         joined = ", ".join(f"{{{k}}}" for k in prior_context_keys)
         prior_block = (
-            f"\n\n## Prior Context\nYou have access to the following earlier "
-            f"outputs from session state: {joined}. Use them to stay consistent "
-            f"with decisions already made (scale, tech choices, schemas, etc.). "
-            f"If a prior decision is missing or unclear, make a reasonable "
-            f"assumption and note it in your Reasoning footer.\n"
+            f"\n\n## Prior Context\nSession state keys: {joined}. "
+            "Use the problem brief and Focus Map when available. Stay "
+            "consistent with earlier decisions.\n"
+        )
+
+    focus_block = ""
+    if include_focus_hint:
+        focus_block = (
+            "\n\n## Focus\nFollow the **Focus Map** in {problem_brief_doc} "
+            "for your section if present.\n"
         )
 
     return f"""You are the {section_title} specialist in a system-design pipeline.
 
-Your ONLY job is to produce the `{filename}` document and persist it.
+Your ONLY job is to produce `{filename}` and persist it via `write_design_doc`.
 
-{schema_body}{prior_block}
+{schema_body}
+{ANTI_GENERIC_RULES}
+{prior_block}{focus_block}
 
 ## Output Rules
-1. Write the FULL markdown document (all required headings above) as your
-   working text.
+1. Write the FULL markdown (all headings above).
 2. {REASONING_FOOTER.strip()}
-3. Once the document is complete, call the `write_design_doc` tool with
-   `workspace` set to the value from session state `{{workspace}}` (the
-   coordinator saved this), `filename="{filename}"`, and
-   `content=<your full markdown document>`.
-4. After the tool returns success, reply with a one-line confirmation such as
-   "Wrote {filename}." Do NOT echo the whole document back to the user.
+3. Call `write_design_doc` with `workspace` = `{{workspace}}`,
+   `filename="{filename}"`, `content=<full markdown>`.
+4. Reply with one line: "Wrote {filename}."
 """
 
 
 def build_index_instruction() -> str:
-    """Instruction for the final summary/index agent."""
-    return f"""You are the INDEX agent at the end of a system-design pipeline.
+    """Instruction for the index agent."""
+    return f"""You are the INDEX agent. Write `00-index.md` linking the full run.
 
-Seven design documents have already been written to disk by the specialist
-agents. Your job is to produce a single `00-index.md` that ties them together.
+Use `list_design_docs` and `read_design_doc` with `{{workspace}}`.
 
-Use `list_design_docs` with `workspace` from session state `{{workspace}}` to
-confirm which files exist, then read whichever you need with `read_design_doc`
-(same workspace). Produce a markdown index with:
+Include every generated file:
+- 00-problem-brief.md, 01–07, 08-decisions-log.md, 09-capacity-estimates.md,
+  00-review.md.
 
 ## System Design: <problem>
-One-paragraph summary (draw from the coordinator's design context).
+One paragraph from the problem brief.
 
 ## Documents
-A numbered list linking to each of the seven section files, with a one-line
-description of what each contains.
+Numbered list: filename — one-line description.
 
 ## Key Decisions at a Glance
-A short bulleted summary of the most important architectural and data decisions
-(tech stack, sharding strategy, consistency stance, etc.).
+Pull from 08-decisions-log.md.
 
 ## Reasoning
 {REASONING_FOOTER.split('## Reasoning', 1)[1].strip()}
 
-Then call `write_design_doc` with `workspace` from session state `{{workspace}}`,
-`filename="00-index.md"`, and the full markdown as `content`. Reply with a
-one-line confirmation afterwards.
+Call `write_design_doc` for `00-index.md`, then confirm in one line.
 """
