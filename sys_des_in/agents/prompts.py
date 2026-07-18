@@ -23,8 +23,8 @@ generic filler.
 ANTI_GENERIC_RULES = """## Anti-generic rules (mandatory)
 This design must NOT read like a generic ChatGPT system-design template.
 
-1. Anchor every major section to `00-problem-brief.md` / `{problem_brief_doc}` /
-   `{design_context}` — cite the product name, critical flows, or constraints.
+1. Anchor every major section to the problem brief / design context in Prior
+   Context below — cite the product name, critical flows, or constraints.
 2. Include at least **two decisions** in this document that would NOT apply to
    an arbitrary unrelated product.
 3. Ban vague claims ("industry best practices", "highly scalable") unless you
@@ -237,8 +237,8 @@ EXTRA_SPECS = [
         "00-problem-brief.md",
         "problem_brief_doc",
         "Problem Brief",
-        """Expand `{design_context}` into the canonical problem anchor file
-`00-problem-brief.md` with these sections:
+        """Expand the design_context brief (see Prior Context) into the
+canonical problem anchor file `00-problem-brief.md` with these sections:
 
 ## Problem Statement
 Who, what, why — specific to this request.
@@ -344,21 +344,30 @@ def build_specialist_instruction(
     *,
     include_focus_hint: bool = True,
 ) -> str:
-    """Assemble the instruction for one specialist agent."""
+    """Assemble the instruction for one specialist agent.
+
+    Session placeholders use ADK's optional form ``{name?}`` so a missing key
+    becomes an empty string instead of crashing the pipeline (see
+    ``inject_session_state``). Required keys that the coordinator always sets
+    still use ``{name}`` where noted in Output Rules.
+    """
     prior_block = ""
     if prior_context_keys:
-        joined = ", ".join(f"{{{k}}}" for k in prior_context_keys)
+        # Optional injection: key may not exist yet for early pipeline stages.
+        sections = "\n".join(
+            f"### {k}\n{{{k}?}}\n" for k in prior_context_keys
+        )
         prior_block = (
-            f"\n\n## Prior Context\nSession state keys: {joined}. "
-            "Use the problem brief and Focus Map when available. Stay "
-            "consistent with earlier decisions.\n"
+            f"\n\n## Prior Context\n"
+            f"Use the material below (empty sections mean not written yet).\n"
+            f"Stay consistent with earlier decisions.\n\n{sections}"
         )
 
     focus_block = ""
     if include_focus_hint:
         focus_block = (
-            "\n\n## Focus\nFollow the **Focus Map** in {problem_brief_doc} "
-            "for your section if present.\n"
+            "\n\n## Focus\nFollow the **Focus Map** in the problem brief "
+            "section above (problem_brief_doc) for your file if present.\n"
         )
 
     return f"""You are the {section_title} specialist in a system-design pipeline.
@@ -372,8 +381,9 @@ Your ONLY job is to produce `{filename}` and persist it via `write_design_doc`.
 ## Output Rules
 1. Write the FULL markdown (all headings above).
 2. {REASONING_FOOTER.strip()}
-3. Call `write_design_doc` with `workspace` = `{{workspace}}`,
-   `filename="{filename}"`, `content=<full markdown>`.
+3. Call `write_design_doc` with `workspace` set from Prior Context
+   (`workspace` / session state), `filename="{filename}"`, and
+   `content=<full markdown>`.
 4. Reply with one line: "Wrote {filename}."
 """
 
@@ -382,7 +392,17 @@ def build_index_instruction() -> str:
     """Instruction for the index agent."""
     return f"""You are the INDEX agent. Write `00-index.md` linking the full run.
 
-Use `list_design_docs` and `read_design_doc` with `{{workspace}}`.
+## Prior Context
+### workspace
+{{workspace?}}
+
+### problem_brief_doc
+{{problem_brief_doc?}}
+
+### decisions_doc
+{{decisions_doc?}}
+
+Use `list_design_docs` and `read_design_doc` with the workspace name above.
 
 Include every generated file:
 - 00-problem-brief.md, 01–07, 08-decisions-log.md, 09-capacity-estimates.md,
