@@ -1,16 +1,15 @@
-.env
-adk-documentation.txt
 # Generated designs (keep folder only)
 sys_des_in/design_outputs/*
 !sys_des_in/design_outputs/.gitkeep
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-venv/
+.env
+
 # Local reference
 sys_des_in/adk-documentation.txt
 # Temp / OS / IDE
 *.tmp
 .DS_Store
 Thumbs.db
+.cursor/
