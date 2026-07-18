@@ -22,10 +22,28 @@ _OUTPUTS_ROOT = os.path.abspath(
 
 # Whitelist of filenames the pipeline is allowed to write. This prevents an
 # agent from scribbling arbitrary files on disk.
-_ALLOWED_FILES = {
+# Public alias kept in sync for the web API / UI checklist.
+ALLOWED_DESIGN_FILES = frozenset(
+    {
+        "00-problem-brief.md",
+        "00-index.md",
+        "00-review.md",
+        "01-requirements.md",
+        "02-architecture.md",
+        "03-api.md",
+        "04-data-model.md",
+        "05-component-design.md",
+        "06-resilience.md",
+        "07-security-ops.md",
+        "08-decisions-log.md",
+        "09-capacity-estimates.md",
+    }
+)
+_ALLOWED_FILES = ALLOWED_DESIGN_FILES
+
+# Stable pipeline order for UI checklists (matches orchestrator stages).
+PIPELINE_FILE_ORDER = (
     "00-problem-brief.md",
-    "00-index.md",
-    "00-review.md",
     "01-requirements.md",
     "02-architecture.md",
     "03-api.md",
@@ -35,10 +53,22 @@ _ALLOWED_FILES = {
     "07-security-ops.md",
     "08-decisions-log.md",
     "09-capacity-estimates.md",
-}
+    "00-review.md",
+    "00-index.md",
+)
 
 
-def _sanitize_workspace(name: str) -> str:
+def is_allowed_filename(filename: str) -> bool:
+    """Return True if ``filename`` is in the design-doc allowlist."""
+    return filename in ALLOWED_DESIGN_FILES
+
+
+def get_outputs_root() -> str:
+    """Absolute path to the design_outputs directory."""
+    return _OUTPUTS_ROOT
+
+
+def sanitize_workspace(name: str) -> str:
     """Turn a free-form problem name into a safe directory name."""
     name = name.strip().lower()
     name = re.sub(r"[^a-z0-9]+", "-", name)
@@ -46,6 +76,10 @@ def _sanitize_workspace(name: str) -> str:
     if not name:
         name = "design"
     return name[:80]
+
+
+def _sanitize_workspace(name: str) -> str:
+    return sanitize_workspace(name)
 
 
 def _workspace_path(workspace: str) -> str:

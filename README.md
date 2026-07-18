@@ -129,6 +129,13 @@ On Windows, `PYTHONUTF8=1` is set automatically (per ADK LiteLLM guidance).
 sysdesigninit/                 # repo root (this README)
 ├── requirements.txt
 ├── LICENSE
+├── app/                       # FastAPI + vanilla TS/CSS web UI
+│   ├── main.py                # HTTP API + static mount
+│   ├── sessions.py            # in-memory sessions + background ADK turns
+│   ├── agent_bridge.py        # wraps ADK Runner
+│   ├── docs_service.py        # safe list/read/zip over design_outputs
+│   ├── static/                # index.html, css/, compiled js/
+│   └── web/                   # TypeScript sources (tsc → static/js)
 └── sys_des_in/                # ADK agent package (valid Python identifier)
     ├── agent.py               # ADK entry point (root_agent)
     ├── runner.py              # multi-turn CLI (safe input loop)
@@ -169,9 +176,28 @@ Edit `sys_des_in/.env` with your API key(s).
 ## Run
 
 All commands below assume your shell is in the **repo root** (the directory
-that contains `sys_des_in/`).
+that contains `sys_des_in/` and `app/`).
 
-### Option A — ADK web UI (recommended for exploring)
+### Option A — Web UI (recommended)
+
+Vanilla TypeScript + CSS frontend served by FastAPI. Chat with the coordinator,
+watch the pipeline checklist, and read generated markdown in the browser.
+
+Requires [Node.js](https://nodejs.org/) only to compile TypeScript (`tsc`);
+there are no frontend runtime libraries.
+
+```bash
+# compile UI (from repo root)
+npx -p typescript tsc -p app/web
+
+# start local server (bind to localhost)
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). API keys stay in
+`sys_des_in/.env` (never exposed to the browser).
+
+### Option B — ADK web UI
 
 ```bash
 adk web
@@ -180,7 +206,7 @@ adk web
 Select **`sys_des_in`**, then chat with the coordinator. When it has enough
 detail it runs the pipeline and writes files to `sys_des_in/design_outputs/`.
 
-### Option B — Multi-turn CLI
+### Option C — Multi-turn CLI
 
 ```bash
 python -m sys_des_in.runner
@@ -190,13 +216,13 @@ python -m sys_des_in.runner "Design a URL shortener for a startup, interview-lev
 - Answer at the `You>` prompt (input is read only after each turn finishes).
 - Quit with `quit`, `exit`, or `q`.
 
-### Option C — ADK built-in CLI
+### Option D — ADK built-in CLI
 
 ```bash
 adk run sys_des_in
 ```
 
-### Option D — API server
+### Option E — ADK API server
 
 ```bash
 adk api_server

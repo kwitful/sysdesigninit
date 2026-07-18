@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sysdesigninit</title>
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">
+          <h1 class="brand-name">sysdesigninit</h1>
+          <p class="brand-tag">AI system-design assistant</p>
+        </div>
+        <div class="top-meta">
+          <span id="phase" class="phase" data-phase="idle">Ready</span>
+          <button type="button" id="new-design-btn" class="btn btn-ghost">
+            New design
+          </button>
+        </div>
+      </header>
+
+      <div id="error-banner" class="error-banner" hidden></div>
+
+      <main class="layout">
+        <section class="pane pane-chat" aria-label="Chat">
+          <div class="pane-head">
+            <h2>Conversation</h2>
+          </div>
+          <div id="chat-empty" class="empty">
+            Describe a system to design. The coordinator will ask a few clarifying
+            questions, then generate design documents.
+          </div>
+          <div id="transcript" class="transcript"></div>
+          <form id="chat-form" class="composer">
+            <label class="sr-only" for="chat-input">Your message</label>
+            <textarea
+              id="chat-input"
+              rows="3"
+              placeholder="e.g. Design a URL shortener for a startup, interview-level"
+              maxlength="8000"
+            ></textarea>
+            <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+          </form>
+        </section>
+
+        <section class="pane pane-docs" aria-label="Documents">
+          <div class="pane-head">
+            <h2>Documents</h2>
+            <span id="workspace-label" class="workspace-label">No workspace yet</span>
+          </div>
+
+          <div class="docs-toolbar">
+            <ol id="pipeline" class="pipeline" aria-label="Pipeline progress"></ol>
+            <div class="docs-actions">
+              <button type="button" id="copy-btn" class="btn btn-ghost" disabled>
+                Copy
+              </button>
+              <a id="download-btn" class="btn btn-ghost" hidden>Download zip</a>
+            </div>
+          </div>
+
+          <div class="docs-split">
+            <div class="file-col">
+              <div id="docs-empty" class="empty empty-sm">
+                No documents yet.
+              </div>
+              <div id="file-list" class="file-list"></div>
+
+              <div class="past-block">
+                <h3>Past designs</h3>
+                <div id="past-empty" class="empty empty-sm">No past workspaces.</div>
+                <div id="past-list" class="past-list"></div>
+              </div>
+            </div>
+            <article class="doc-pane">
+              <h3 id="doc-title" class="doc-title">Document</h3>
+              <div id="doc-body" class="doc-body"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/static/js/main.js"></script>
+  </body>
+</html>
