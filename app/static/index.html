@@ -14,19 +14,43 @@
           <p class="brand-tag">AI system-design assistant</p>
         </div>
         <div class="top-meta">
-          <span id="phase" class="phase" data-phase="idle">Ready</span>
+          <span id="phase" class="phase" data-phase="idle" aria-live="off">Ready</span>
+          <button type="button" id="cancel-btn" class="btn btn-ghost" hidden>
+            Cancel
+          </button>
           <button type="button" id="new-design-btn" class="btn btn-ghost">
             New design
           </button>
         </div>
       </header>
 
+      <div id="progress-live" class="sr-only" aria-live="polite"></div>
       <div id="error-banner" class="error-banner" hidden></div>
+      <div id="status-banner" class="status-banner" hidden></div>
+      <div id="overwrite-banner" class="overwrite-banner" hidden></div>
+      <div id="browse-banner" class="browse-banner" hidden>
+        Viewing a past design (read-only).
+        <button type="button" id="back-session-btn" class="btn btn-ghost">
+          Back to current session
+        </button>
+      </div>
 
-      <main class="layout">
-        <section class="pane pane-chat" aria-label="Chat">
+      <nav id="mobile-tabs" class="mobile-tabs" aria-label="Sections">
+        <button type="button" data-tab="chat" class="is-active">Chat</button>
+        <button type="button" data-tab="docs">Docs</button>
+        <button type="button" data-tab="history">History</button>
+      </nav>
+
+      <main id="layout" class="layout" data-tab="chat">
+        <section class="pane pane-chat" data-pane="chat" aria-label="Chat">
           <div class="pane-head">
             <h2>Conversation</h2>
+          </div>
+          <div id="brief-panel" class="brief-panel">
+            <details open>
+              <summary>Design brief</summary>
+              <div id="brief-body" class="brief-body"></div>
+            </details>
           </div>
           <div id="chat-empty" class="empty">
             Describe a system to design. The coordinator will ask a few clarifying
@@ -41,19 +65,51 @@
               placeholder="e.g. Design a URL shortener for a startup, interview-level"
               maxlength="8000"
             ></textarea>
-            <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+            <div class="composer-actions">
+              <p id="send-hint" class="send-hint" hidden></p>
+              <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+            </div>
           </form>
         </section>
 
-        <section class="pane pane-docs" aria-label="Documents">
+        <section class="pane pane-docs" data-pane="docs" aria-label="Documents">
           <div class="pane-head">
             <h2>Documents</h2>
             <span id="workspace-label" class="workspace-label">No workspace yet</span>
           </div>
 
+          <div id="completion-card" class="completion-card" hidden>
+            <p class="completion-title">Design packet ready</p>
+            <p class="completion-copy">
+              Start with the problem brief, then check the specificity review.
+            </p>
+            <div class="completion-actions">
+              <button type="button" id="open-brief-btn" class="btn btn-primary">
+                Open problem brief
+              </button>
+              <button type="button" id="open-review-btn" class="btn btn-ghost">
+                Open review
+              </button>
+              <button type="button" id="dismiss-complete-btn" class="btn btn-ghost">
+                Dismiss
+              </button>
+            </div>
+          </div>
+
           <div class="docs-toolbar">
+            <div id="progress-strip" class="progress-strip" hidden></div>
             <ol id="pipeline" class="pipeline" aria-label="Pipeline progress"></ol>
+            <ul id="activity-feed" class="activity-feed" hidden></ul>
             <div class="docs-actions">
+              <button type="button" id="prev-doc-btn" class="btn btn-ghost" disabled>
+                Prev
+              </button>
+              <button type="button" id="next-doc-btn" class="btn btn-ghost" disabled>
+                Next
+              </button>
+              <button type="button" id="toggle-view-btn" class="btn btn-ghost" disabled>
+                Raw
+              </button>
               <button type="button" id="copy-btn" class="btn btn-ghost" disabled>
                 Copy
               </button>
@@ -62,14 +118,20 @@
           </div>
 
           <div class="docs-split">
-            <div class="file-col">
-              <div id="docs-empty" class="empty empty-sm">
-                No documents yet.
-              </div>
+            <div class="file-col" data-pane="history">
+              <div id="docs-empty" class="empty empty-sm">No documents yet.</div>
               <div id="file-list" class="file-list"></div>
+              <nav id="doc-toc" class="doc-toc" hidden aria-label="On this page"></nav>
 
               <div class="past-block">
                 <h3>Past designs</h3>
+                <label class="sr-only" for="past-filter">Filter past designs</label>
+                <input
+                  id="past-filter"
+                  class="past-filter"
+                  type="search"
+                  placeholder="Filter by name or problem"
+                />
                 <div id="past-empty" class="empty empty-sm">No past workspaces.</div>
                 <div id="past-list" class="past-list"></div>
               </div>

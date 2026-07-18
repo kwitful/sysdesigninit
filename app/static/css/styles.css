@@ -507,3 +507,248 @@ body {
   border-left: 3px solid var(--accent-dim);
   color: var(--ink-muted);
 }
+
+.status-banner,
+.overwrite-banner,
+.browse-banner {
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Author `display: flex` must not override the HTML hidden attribute. */
+.status-banner[hidden],
+.overwrite-banner[hidden],
+.browse-banner[hidden],
+.error-banner[hidden],
+.progress-strip[hidden],
+.activity-feed[hidden],
+.completion-card[hidden],
+.doc-toc[hidden],
+#download-btn[hidden],
+#cancel-btn[hidden],
+#send-hint[hidden] {
+  display: none !important;
+}
+
+.status-banner {
+  background: rgba(61, 154, 106, 0.12);
+  border-color: var(--accent-dim);
+  color: #c9e4d4;
+}
+
+.overwrite-banner {
+  background: rgba(200, 160, 60, 0.12);
+  border-color: rgba(200, 160, 60, 0.4);
+  color: #e8d9a8;
+}
+
+.browse-banner {
+  background: rgba(90, 140, 180, 0.12);
+  border-color: rgba(90, 140, 180, 0.35);
+}
+
+.progress-strip {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #c9e4d4;
+}
+
+.activity-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  max-height: 6rem;
+  overflow-y: auto;
+}
+
+.completion-card {
+  margin: 0.75rem 1rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  background: rgba(61, 154, 106, 0.1);
+}
+
+.completion-title {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.completion-copy {
+  margin: 0 0 0.75rem;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.brief-panel {
+  padding: 0.5rem 1rem 0;
+}
+
+.brief-panel summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.brief-body {
+  margin-top: 0.5rem;
+  max-height: 10rem;
+  overflow-y: auto;
+  font-size: 0.82rem;
+}
+
+.brief-field + .brief-field {
+  margin-top: 0.55rem;
+}
+
+.brief-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 0.15rem;
+}
+
+.brief-text {
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.composer-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.send-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  max-width: 8rem;
+}
+
+.past-filter {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.doc-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--line);
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.toc-link {
+  color: var(--ink-muted);
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+
+.toc-link:hover {
+  color: var(--ink);
+}
+
+.toc-l3,
+.toc-l4 {
+  padding-left: 0.65rem;
+}
+
+.doc-raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.mobile-tabs {
+  display: none;
+  gap: 0.35rem;
+}
+
+.mobile-tabs button {
+  flex: 1;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.mobile-tabs button.is-active {
+  color: var(--ink);
+  border-color: var(--accent-dim);
+  background: rgba(61, 154, 106, 0.1);
+}
+
+@media (max-width: 900px) {
+  .mobile-tabs {
+    display: flex;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  .layout .pane {
+    display: none;
+  }
+
+  .layout[data-tab="chat"] .pane-chat {
+    display: flex;
+  }
+
+  .layout[data-tab="docs"] .pane-docs {
+    display: flex;
+  }
+
+  .layout[data-tab="history"] .pane-docs {
+    display: flex;
+  }
+
+  .layout[data-tab="history"] .docs-split {
+    grid-template-columns: 1fr;
+  }
+
+  .layout[data-tab="history"] .doc-pane {
+    display: none;
+  }
+
+  .layout[data-tab="docs"] .past-block {
+    display: none;
+  }
+}

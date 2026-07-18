@@ -38,6 +38,12 @@ class PipelineStep:
 class WorkspaceInfo:
     name: str
     problem: Optional[str]
+    mtime: Optional[float] = None
+    docs_count: int = 0
+
+
+def docs_total() -> int:
+    return len(PIPELINE_FILE_ORDER)
 
 
 def list_files(workspace: str) -> List[FileEntry]:
@@ -51,15 +57,17 @@ def list_files(workspace: str) -> List[FileEntry]:
     return [FileEntry(name=name, ready=name in present) for name in PIPELINE_FILE_ORDER]
 
 
+def ready_filenames(workspace: Optional[str]) -> set[str]:
+    if not workspace:
+        return set()
+    try:
+        return {e.name for e in list_files(workspace) if e.ready}
+    except SecurityError:
+        return set()
+
+
 def pipeline_status(workspace: Optional[str]) -> List[PipelineStep]:
-    present: set[str] = set()
-    if workspace:
-        try:
-            for entry in list_files(workspace):
-                if entry.ready:
-                    present.add(entry.name)
-        except SecurityError:
-            present = set()
+    present = ready_filenames(workspace)
     return [
         PipelineStep(
             id=name,
@@ -71,22 +79,14 @@ def pipeline_status(workspace: Optional[str]) -> List[PipelineStep]:
 
 
 def docs_count(workspace: Optional[str]) -> int:
-    if not workspace:
-        return 0
-    try:
-        return sum(1 for e in list_files(workspace) if e.ready)
-    except SecurityError:
-        return 0
+    return len(ready_filenames(workspace))
 
 
 def all_docs_ready(workspace: Optional[str]) -> bool:
     if not workspace:
         return False
-    try:
-        entries = list_files(workspace)
-    except SecurityError:
-        return False
-    return bool(entries) and all(e.ready for e in entries)
+    present = ready_filenames(workspace)
+    return len(present) == len(PIPELINE_FILE_ORDER)
 
 
 def read_markdown(workspace: str, filename: str) -> str:
@@ -96,20 +96,17 @@ def read_markdown(workspace: str, filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def list_workspaces() -> List[WorkspaceInfo]:
+def list_workspaces(*, q: Optional[str] = None) -> List[WorkspaceInfo]:
     root = outputs_root()
     if not root.is_dir():
         return []
+    query = (q or "").strip().lower()
     results: List[WorkspaceInfo] = []
     for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
         if not child.is_dir() or child.name.startswith("."):
             continue
         try:
             name = validate_workspace_name(child.name)
-        except SecurityError:
-            continue
-        # Confirm containment.
-        try:
             resolve_workspace_dir(name)
         except SecurityError:
             continue
@@ -120,8 +117,28 @@ def list_workspaces() -> List[WorkspaceInfo]:
                 problem = marker.read_text(encoding="utf-8").strip() or None
             except OSError:
                 problem = None
-        results.append(WorkspaceInfo(name=name, problem=problem))
+        if query:
+            hay = f"{name} {problem or ''}".lower()
+            if query not in hay:
+                continue
+        try:
+            mtime = child.stat().st_mtime
+        except OSError:
+            mtime = None
+        count = docs_count(name)
+        results.append(
+            WorkspaceInfo(name=name, problem=problem, mtime=mtime, docs_count=count)
+        )
     return results
+
+
+def workspace_exists(name: str) -> bool:
+    try:
+        safe = validate_workspace_name(name)
+        path = resolve_workspace_dir(safe)
+    except SecurityError:
+        return False
+    return path.is_dir()
 
 
 def build_workspace_zip(workspace: str) -> bytes:

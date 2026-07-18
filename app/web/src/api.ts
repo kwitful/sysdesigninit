@@ -1,4 +1,12 @@
-import type { FileEntry, Phase, PipelineStep } from "./state.js";
+import type {
+  ActivityEvent,
+  Brief,
+  ChatMessage,
+  FileEntry,
+  Phase,
+  PipelineStep,
+  TocEntry,
+} from "./state.js";
 
 export class ApiError extends Error {
   status: number;
@@ -42,8 +50,18 @@ export type SessionState = {
   last_assistant: string | null;
   last_user: string | null;
   error: string | null;
+  status_message: string | null;
   docs_count: number;
+  docs_total: number;
+  elapsed_ms: number | null;
+  current_step: { id: string; label: string } | null;
+  activity: ActivityEvent[];
+  just_completed: boolean;
   pipeline: PipelineStep[];
+  messages: ChatMessage[];
+  design_context: string | null;
+  brief: Brief | null;
+  overwrite_warning: string | null;
 };
 
 export async function createSession(): Promise<{ session_id: string; phase: Phase }> {
@@ -65,6 +83,18 @@ export async function resetSession(id: string): Promise<{ session_id: string; ph
   return request(`/api/sessions/${encodeURIComponent(id)}/reset`, { method: "POST" });
 }
 
+export async function ackComplete(id: string): Promise<void> {
+  await request(`/api/sessions/${encodeURIComponent(id)}/ack-complete`, {
+    method: "POST",
+  });
+}
+
+export async function cancelSession(
+  id: string
+): Promise<{ session_id: string; phase: Phase; status_message: string | null }> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+
 export async function getSessionDocs(
   id: string
 ): Promise<{ workspace: string | null; files: FileEntry[]; pipeline: PipelineStep[] }> {
@@ -74,16 +104,22 @@ export async function getSessionDocs(
 export async function getSessionDoc(
   id: string,
   filename: string
-): Promise<{ filename: string; markdown: string; html: string }> {
+): Promise<{ filename: string; markdown: string; html: string; toc: TocEntry[] }> {
   return request(
     `/api/sessions/${encodeURIComponent(id)}/docs/${encodeURIComponent(filename)}`
   );
 }
 
-export async function listWorkspaces(): Promise<{
-  workspaces: { name: string; problem: string | null }[];
+export async function listWorkspaces(q?: string): Promise<{
+  workspaces: {
+    name: string;
+    problem: string | null;
+    mtime?: number | null;
+    docs_count?: number;
+  }[];
 }> {
-  return request("/api/workspaces");
+  const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return request(`/api/workspaces${qs}`);
 }
 
 export async function getWorkspaceDocs(
@@ -95,12 +131,22 @@ export async function getWorkspaceDocs(
 export async function getWorkspaceDoc(
   name: string,
   filename: string
-): Promise<{ filename: string; markdown: string; html: string }> {
+): Promise<{ filename: string; markdown: string; html: string; toc: TocEntry[] }> {
   return request(
     `/api/workspaces/${encodeURIComponent(name)}/docs/${encodeURIComponent(filename)}`
   );
 }
 
+export async function getWorkspaceChat(
+  name: string
+): Promise<{ workspace: string; messages: ChatMessage[] }> {
+  return request(`/api/workspaces/${encodeURIComponent(name)}/chat`);
+}
+
 export function workspaceDownloadUrl(name: string): string {
   return `/api/workspaces/${encodeURIComponent(name)}/download`;
+}
+
+export function sessionEventsUrl(id: string): string {
+  return `/api/sessions/${encodeURIComponent(id)}/events`;
 }

@@ -130,10 +130,13 @@ sysdesigninit/                 # repo root (this README)
 ├── requirements.txt
 ├── LICENSE
 ├── app/                       # FastAPI + vanilla TS/CSS web UI
-│   ├── main.py                # HTTP API + static mount
+│   ├── main.py                # HTTP API + SSE + static mount
 │   ├── sessions.py            # in-memory sessions + background ADK turns
 │   ├── agent_bridge.py        # wraps ADK Runner
 │   ├── docs_service.py        # safe list/read/zip over design_outputs
+│   ├── chat_store.py          # chat.json / meta.json sidecars
+│   ├── brief_parse.py         # design_context → brief fields
+│   ├── markdown_render.py     # markdown → sanitized HTML + TOC
 │   ├── static/                # index.html, css/, compiled js/
 │   └── web/                   # TypeScript sources (tsc → static/js)
 └── sys_des_in/                # ADK agent package (valid Python identifier)
@@ -197,6 +200,20 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). API keys stay in
 `sys_des_in/.env` (never exposed to the browser).
 
+**Web UI features (v1.1–v1.3):**
+
+- Live progress while generating (`docs written · elapsed time · current step`)
+  via polling, with Server-Sent Events preferred when available (poll fallback).
+- Activity feed as each design file lands; **Cancel** soft-stops an in-flight turn.
+- Completion card linking to **problem brief** and **review**.
+- Design brief panel (parsed from coordinator context), prev/next docs, TOC,
+  raw/rendered toggle, and hash deep links.
+- Chat persisted to `design_outputs/<workspace>/chat.json` once a workspace
+  exists; pre-workspace chat mirrored in `sessionStorage`.
+- Past designs: filter/search, mtime + doc count, read-only browse with
+  “Back to current session”, zip download.
+- Mobile tabs: Chat | Docs | History.
+
 ### Option B — ADK web UI
 
 ```bash
@@ -232,6 +249,9 @@ adk api_server
 
 ```
 sys_des_in/design_outputs/url-shortener-for-a-startup/
+├── .problem.txt
+├── chat.json                 # web UI chat transcript (not agent-written)
+├── meta.json                 # optional completion metadata from web UI
 ├── 00-problem-brief.md
 ├── 00-index.md
 ├── 00-review.md

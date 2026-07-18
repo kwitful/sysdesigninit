@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -12,6 +12,7 @@ from google.genai import types
 
 APP_NAME = "sysdesigninit"
 USER_ID = "web-user"
+_DESIGN_CONTEXT_CAP = 32_000
 
 
 def load_dotenv() -> None:
@@ -37,7 +38,6 @@ def load_dotenv() -> None:
 async def create_adk_session() -> Tuple[Runner, InMemorySessionService, str]:
     """Create Runner + session; import root_agent after dotenv is loaded."""
     load_dotenv()
-    # Import after dotenv so get_model() sees provider keys.
     from sys_des_in.agents import root_agent
 
     session_service = InMemorySessionService()
@@ -80,28 +80,47 @@ async def run_turn(
     return final_text or "(no final response)"
 
 
+def _state_get(state: Any, key: str) -> Any:
+    if state is None:
+        return None
+    if hasattr(state, "get"):
+        return state.get(key)
+    if isinstance(state, dict):
+        return state.get(key)
+    return None
+
+
+async def read_state_keys(
+    session_service: InMemorySessionService,
+    session_id: str,
+) -> Dict[str, Optional[str]]:
+    """Best-effort read of workspace + design_context from ADK session state."""
+    result: Dict[str, Optional[str]] = {"workspace": None, "design_context": None}
+    try:
+        session = await session_service.get_session(
+            app_name=APP_NAME, user_id=USER_ID, session_id=session_id
+        )
+    except Exception:  # noqa: BLE001
+        return result
+    if session is None:
+        return result
+    state = getattr(session, "state", None)
+    workspace = _state_get(state, "workspace")
+    if isinstance(workspace, str) and workspace.strip():
+        result["workspace"] = workspace.strip()
+    ctx = _state_get(state, "design_context")
+    if isinstance(ctx, str) and ctx.strip():
+        text = ctx.strip()
+        if len(text) > _DESIGN_CONTEXT_CAP:
+            text = text[:_DESIGN_CONTEXT_CAP]
+        result["design_context"] = text
+    return result
+
+
 async def read_workspace_from_session(
     session_service: InMemorySessionService,
     session_id: str,
 ) -> Optional[str]:
     """Best-effort read of ``workspace`` from ADK session state."""
-    try:
-        session = await session_service.get_session(
-            app_name=APP_NAME, user_id=USER_ID, session_id=session_id
-        )
-    except Exception:  # noqa: BLE001 — optional enrichment only
-        return None
-    if session is None:
-        return None
-    state: Any = getattr(session, "state", None)
-    if state is None:
-        return None
-    # state may be a dict-like or object with get
-    workspace = None
-    if hasattr(state, "get"):
-        workspace = state.get("workspace")
-    elif isinstance(state, dict):
-        workspace = state.get("workspace")
-    if isinstance(workspace, str) and workspace.strip():
-        return workspace.strip()
-    return None
+    keys = await read_state_keys(session_service, session_id)
+    return keys.get("workspace")

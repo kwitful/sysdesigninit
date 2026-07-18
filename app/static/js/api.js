@@ -48,14 +48,23 @@ export async function postMessage(id, text) {
 export async function resetSession(id) {
     return request(`/api/sessions/${encodeURIComponent(id)}/reset`, { method: "POST" });
 }
+export async function ackComplete(id) {
+    await request(`/api/sessions/${encodeURIComponent(id)}/ack-complete`, {
+        method: "POST",
+    });
+}
+export async function cancelSession(id) {
+    return request(`/api/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
 export async function getSessionDocs(id) {
     return request(`/api/sessions/${encodeURIComponent(id)}/docs`);
 }
 export async function getSessionDoc(id, filename) {
     return request(`/api/sessions/${encodeURIComponent(id)}/docs/${encodeURIComponent(filename)}`);
 }
-export async function listWorkspaces() {
-    return request("/api/workspaces");
+export async function listWorkspaces(q) {
+    const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return request(`/api/workspaces${qs}`);
 }
 export async function getWorkspaceDocs(name) {
     return request(`/api/workspaces/${encodeURIComponent(name)}/docs`);
@@ -63,7 +72,13 @@ export async function getWorkspaceDocs(name) {
 export async function getWorkspaceDoc(name, filename) {
     return request(`/api/workspaces/${encodeURIComponent(name)}/docs/${encodeURIComponent(filename)}`);
 }
+export async function getWorkspaceChat(name) {
+    return request(`/api/workspaces/${encodeURIComponent(name)}/chat`);
+}
 export function workspaceDownloadUrl(name) {
     return `/api/workspaces/${encodeURIComponent(name)}/download`;
+}
+export function sessionEventsUrl(id) {
+    return `/api/sessions/${encodeURIComponent(id)}/events`;
 }
 //# sourceMappingURL=api.js.map
