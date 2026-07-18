@@ -1,9 +1,11 @@
 import * as api from "./api.js";
+import { deriveJourney } from "./journey.js";
 import { createInitialState, isBusy, STORAGE_KEY, } from "./state.js";
 import { getRefs, render, scrollTranscriptToEnd } from "./ui.js";
 const POLL_MS = 1500;
 const BRIEF_FILE = "00-problem-brief.md";
 const REVIEW_FILE = "00-review.md";
+const INDEX_FILE = "00-index.md";
 const state = createInitialState();
 const refs = getRefs();
 let eventSource = null;
@@ -133,7 +135,13 @@ async function refreshPast() {
     }
 }
 function readyPipelineOrder() {
-    return state.pipeline.filter((p) => p.status === "ready").map((p) => p.id);
+    const fromPipe = state.pipeline
+        .filter((p) => p.status === "ready" ||
+        state.files.some((f) => f.name === p.id && f.ready))
+        .map((p) => p.id);
+    if (fromPipe.length)
+        return fromPipe;
+    return state.files.filter((f) => f.ready).map((f) => f.name);
 }
 async function loadDoc(filename) {
     state.selectedFile = filename;
@@ -176,10 +184,10 @@ async function refreshDocs() {
         if (!state.browsingWorkspace && data.workspace) {
             state.workspace = data.workspace;
         }
+        state.docsCount = data.files.filter((f) => f.ready).length;
         const ready = data.files.filter((f) => f.ready);
         if (!state.selectedFile && ready.length) {
-            const prefer = ready.find((f) => f.name === BRIEF_FILE) ||
-                ready[0];
+            const prefer = ready.find((f) => f.name === BRIEF_FILE) || ready[0];
             if (prefer)
                 await loadDoc(prefer.name);
         }
@@ -197,6 +205,7 @@ async function refreshDocs() {
 function applySnapshot(snap) {
     state.phase = snap.phase;
     state.workspace = snap.workspace;
+    state.problem = snap.problem;
     state.pipeline = snap.pipeline;
     state.error = snap.error;
     state.statusMessage = snap.status_message;
@@ -208,11 +217,18 @@ function applySnapshot(snap) {
     state.justCompleted = snap.just_completed;
     state.brief = snap.brief;
     state.overwriteWarning = snap.overwrite_warning;
-    if (snap.just_completed || snap.phase === "complete") {
-        state.showCompletionCard = true;
+    // Clear manual override when phase advances past it
+    if (snap.phase === "complete" || snap.just_completed) {
+        if (state.journeyOverride === "clarify" || state.journeyOverride === "generate") {
+            state.journeyOverride = null;
+        }
+    }
+    if (isBusy(snap.phase) && state.workspace) {
+        if (state.journeyOverride === "clarify") {
+            state.journeyOverride = null;
+        }
     }
     if (snap.messages && snap.messages.length) {
-        // Prefer server messages when longer (hydrated)
         if (snap.messages.length >= state.messages.length) {
             state.messages = snap.messages.map((m) => ({
                 role: m.role,
@@ -236,10 +252,18 @@ async function afterSnapshot(snap) {
         await refreshDocs();
         if ((snap.just_completed || snap.phase === "complete") &&
             !state.browsingWorkspace) {
+            state.journeyOverride = null;
+            state.mobileTab = "docs";
             const hasBrief = state.files.some((f) => f.name === BRIEF_FILE && f.ready);
             if (hasBrief && state.selectedFile !== BRIEF_FILE) {
                 await loadDoc(BRIEF_FILE);
             }
+            if (state.sessionId && snap.just_completed) {
+                void api.ackComplete(state.sessionId).catch(() => undefined);
+            }
+        }
+        else if (isBusy(snap.phase) && snap.workspace) {
+            state.mobileTab = "docs";
         }
     }
     if (!isBusy(snap.phase)) {
@@ -271,6 +295,8 @@ async function onSend(text) {
     if (!trimmed || isBusy(state.phase) || state.browsingWorkspace)
         return;
     state.browsingWorkspace = null;
+    state.browsingProblem = null;
+    state.journeyOverride = null;
     state.error = null;
     state.statusMessage = null;
     state.messages.push({ role: "user", text: trimmed });
@@ -296,16 +322,17 @@ async function onSend(text) {
         paint();
     }
 }
-async function onNewDesign() {
+async function onStartOver() {
     if (state.messages.length > 0 ||
         state.docsCount > 0 ||
         state.files.some((f) => f.ready)) {
-        const ok = window.confirm("Start a new design? Current chat will be cleared (docs on disk remain).");
+        const ok = window.confirm("Start over? Current chat will be cleared (documents on disk remain).");
         if (!ok)
             return;
     }
     stopLive();
     state.browsingWorkspace = null;
+    state.browsingProblem = null;
     state.messages = [];
     state.lastAssistantSeen = null;
     state.files = [];
@@ -315,17 +342,19 @@ async function onNewDesign() {
     state.docMarkdown = "";
     state.toc = [];
     state.workspace = null;
+    state.problem = null;
     state.error = null;
     state.statusMessage = null;
     state.phase = "idle";
     state.brief = null;
     state.activity = [];
     state.justCompleted = false;
-    state.showCompletionCard = false;
     state.overwriteWarning = null;
     state.docsCount = 0;
+    state.journeyOverride = null;
+    state.forceHistory = false;
+    state.mobileTab = "chat";
     clearSessionStorage();
-    // Drop any past-workspace hash so reload does not re-enter browse mode.
     history.replaceState(null, "", location.pathname + location.search);
     try {
         if (state.sessionId) {
@@ -343,6 +372,7 @@ async function onNewDesign() {
         state.error = err instanceof Error ? err.message : "Reset failed.";
     }
     paint();
+    refs.inputEl.focus();
 }
 async function onCancel() {
     if (!state.sessionId || !isBusy(state.phase))
@@ -364,7 +394,11 @@ async function onCancel() {
 }
 async function backToSession() {
     state.browsingWorkspace = null;
+    state.browsingProblem = null;
+    state.forceHistory = false;
     state.error = null;
+    state.journeyOverride = null;
+    state.mobileTab = "docs";
     if (state.sessionId) {
         try {
             const snap = await api.getSession(state.sessionId);
@@ -378,17 +412,17 @@ async function backToSession() {
     updateHash();
     paint();
 }
-async function openPastWorkspace(name) {
+async function openPastWorkspace(name, problem) {
     stopLive();
     state.browsingWorkspace = name;
+    state.browsingProblem = problem ?? null;
     state.selectedFile = null;
     state.docHtml = "";
     state.docMarkdown = "";
     state.toc = [];
     state.error = null;
     state.pipeline = [];
-    state.showCompletionCard = false;
-    state.mobileTab = "docs";
+    state.mobileTab = "history";
     paint();
     try {
         const chat = await api.getWorkspaceChat(name);
@@ -403,6 +437,41 @@ async function openPastWorkspace(name) {
     updateHash();
     paint();
 }
+function goRail(step) {
+    if (step === "history") {
+        state.mobileTab = "history";
+        state.forceHistory = true;
+        paint();
+        return;
+    }
+    state.forceHistory = false;
+    if (state.browsingWorkspace) {
+        void backToSession().then(() => {
+            state.journeyOverride = step;
+            state.mobileTab = step === "clarify" ? "chat" : "docs";
+            paint();
+            if (step === "clarify")
+                refs.inputEl.focus();
+            if (step === "review")
+                void loadDoc(BRIEF_FILE);
+        });
+        return;
+    }
+    const canGenerate = state.docsCount > 0 || isBusy(state.phase) || !!state.workspace;
+    const canReview = state.phase === "complete" ||
+        (state.docsTotal > 0 && state.docsCount >= state.docsTotal);
+    if (step === "generate" && !canGenerate)
+        return;
+    if (step === "review" && !canReview)
+        return;
+    state.journeyOverride = step;
+    state.mobileTab = step === "clarify" ? "chat" : "docs";
+    paint();
+    if (step === "clarify")
+        refs.inputEl.focus();
+    if (step === "review")
+        void loadDoc(BRIEF_FILE);
+}
 function updateHash() {
     if (applyingHash)
         return;
@@ -414,11 +483,11 @@ function updateHash() {
     else if (state.browsingWorkspace) {
         hash = `#/w/${encodeURIComponent(state.browsingWorkspace)}`;
     }
-    else if (file) {
+    else if (file && deriveJourney(state) !== "clarify") {
         hash = `#/d/${encodeURIComponent(file)}`;
     }
     if (location.hash !== hash) {
-        history.replaceState(null, "", hash || location.pathname);
+        history.replaceState(null, "", hash || location.pathname + location.search);
     }
 }
 async function applyHash() {
@@ -428,7 +497,6 @@ async function applyHash() {
     applyingHash = true;
     try {
         const parts = h.split("/").filter(Boolean);
-        // /w/name/d/file or /w/name or /d/file
         if (parts[0] === "w" && parts[1]) {
             const name = decodeURIComponent(parts[1]);
             await openPastWorkspace(name);
@@ -445,7 +513,7 @@ async function applyHash() {
     }
 }
 function neighborDoc(delta) {
-    const ready = readyPipelineOrder().filter((name) => state.files.some((f) => f.name === name && f.ready));
+    const ready = readyPipelineOrder();
     if (!state.selectedFile)
         return null;
     const idx = ready.indexOf(state.selectedFile);
@@ -464,8 +532,8 @@ async function init() {
             void onSend(refs.inputEl.value);
         }
     });
-    refs.newDesignBtn.addEventListener("click", () => {
-        void onNewDesign();
+    refs.startOverBtn.addEventListener("click", () => {
+        void onStartOver();
     });
     refs.cancelBtn.addEventListener("click", () => {
         void onCancel();
@@ -473,6 +541,10 @@ async function init() {
     refs.backSessionBtn.addEventListener("click", () => {
         void backToSession();
     });
+    refs.railClarify.addEventListener("click", () => goRail("clarify"));
+    refs.railGenerate.addEventListener("click", () => goRail("generate"));
+    refs.railReview.addEventListener("click", () => goRail("review"));
+    refs.railHistory.addEventListener("click", () => goRail("history"));
     refs.copyBtn.addEventListener("click", () => {
         if (!state.docMarkdown)
             return;
@@ -487,19 +559,21 @@ async function init() {
             paint();
         });
     });
-    refs.fileListEl.addEventListener("click", (e) => {
+    const onSectionClick = (e) => {
         const target = e.target;
-        const btn = target?.closest("button.file-btn");
-        if (!btn?.dataset.filename)
+        const btn = target?.closest("button.section-btn");
+        if (!btn?.dataset.filename || btn.disabled)
             return;
         void loadDoc(btn.dataset.filename);
-    });
+    };
+    refs.sectionList.addEventListener("click", onSectionClick);
+    refs.sectionListReview.addEventListener("click", onSectionClick);
     refs.pastListEl.addEventListener("click", (e) => {
         const target = e.target;
         const btn = target?.closest("button.past-btn");
         if (!btn?.dataset.workspace)
             return;
-        void openPastWorkspace(btn.dataset.workspace);
+        void openPastWorkspace(btn.dataset.workspace, btn.dataset.problem || null);
     });
     refs.pastFilterEl.addEventListener("input", () => {
         state.pastFilter = refs.pastFilterEl.value;
@@ -525,13 +599,8 @@ async function init() {
     refs.openReviewBtn.addEventListener("click", () => {
         void loadDoc(REVIEW_FILE);
     });
-    refs.dismissCompleteBtn.addEventListener("click", () => {
-        state.showCompletionCard = false;
-        state.justCompleted = false;
-        if (state.sessionId) {
-            void api.ackComplete(state.sessionId).catch(() => undefined);
-        }
-        paint();
+    refs.openIndexBtn.addEventListener("click", () => {
+        void loadDoc(INDEX_FILE);
     });
     refs.docBodyEl.addEventListener("click", (e) => {
         const target = e.target;
@@ -555,7 +624,25 @@ async function init() {
         const btn = target?.closest("button[data-tab]");
         if (!btn?.dataset.tab)
             return;
-        state.mobileTab = btn.dataset.tab;
+        const tab = btn.dataset.tab;
+        state.mobileTab = tab;
+        if (tab === "history") {
+            state.forceHistory = true;
+        }
+        else if (tab === "chat") {
+            state.forceHistory = false;
+            if (!state.browsingWorkspace)
+                state.journeyOverride = "clarify";
+        }
+        else if (tab === "docs") {
+            state.forceHistory = false;
+            if (!state.browsingWorkspace) {
+                const j = deriveJourney({ ...state, forceHistory: false });
+                if (j === "clarify" && state.docsCount > 0) {
+                    state.journeyOverride = "generate";
+                }
+            }
+        }
         paint();
     });
     window.addEventListener("hashchange", () => {
@@ -574,7 +661,6 @@ async function init() {
                     startLive();
             }
             catch {
-                // Session gone after restart — keep local messages, create new session
                 state.sessionId = null;
                 await ensureSession();
             }

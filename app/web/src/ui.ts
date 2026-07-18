@@ -1,48 +1,64 @@
-import type { AppState, Brief, Phase } from "./state.js";
+import type { AppState, Brief } from "./state.js";
 import { isBusy } from "./state.js";
+import {
+  deriveJourney,
+  statusLineText,
+  systemBanner,
+  type Journey,
+} from "./journey.js";
 import { clearDoc, setDocHtml, setDocRaw } from "./markdown.js";
 
 export type DomRefs = {
-  phaseEl: HTMLElement;
+  header: HTMLElement;
+  designTitle: HTMLElement;
+  statusLine: HTMLElement;
   progressLive: HTMLElement;
-  errorEl: HTMLElement;
-  statusEl: HTMLElement;
-  browseBanner: HTMLElement;
+  systemBanner: HTMLElement;
+  systemBannerText: HTMLElement;
   backSessionBtn: HTMLButtonElement;
-  overwriteEl: HTMLElement;
-  transcriptEl: HTMLElement;
+  cancelBtn: HTMLButtonElement;
+  startOverBtn: HTMLButtonElement;
+  layoutEl: HTMLElement;
+  railClarify: HTMLButtonElement;
+  railGenerate: HTMLButtonElement;
+  railReview: HTMLButtonElement;
+  railHistory: HTMLButtonElement;
+  blockChat: HTMLElement;
+  blockDocs: HTMLElement;
   chatEmptyEl: HTMLElement;
-  briefPanel: HTMLElement;
-  briefBody: HTMLElement;
+  transcriptEl: HTMLElement;
   formEl: HTMLFormElement;
   inputEl: HTMLTextAreaElement;
   sendBtn: HTMLButtonElement;
   sendHint: HTMLElement;
-  cancelBtn: HTMLButtonElement;
-  newDesignBtn: HTMLButtonElement;
-  pipelineEl: HTMLElement;
-  progressStrip: HTMLElement;
-  activityEl: HTMLElement;
-  completionCard: HTMLElement;
+  reviewStrip: HTMLElement;
   openBriefBtn: HTMLButtonElement;
   openReviewBtn: HTMLButtonElement;
-  dismissCompleteBtn: HTMLButtonElement;
-  fileListEl: HTMLElement;
-  docsEmptyEl: HTMLElement;
-  docTitleEl: HTMLElement;
-  docBodyEl: HTMLElement;
-  tocEl: HTMLElement;
-  copyBtn: HTMLButtonElement;
-  downloadBtn: HTMLAnchorElement;
+  openIndexBtn: HTMLButtonElement;
   prevDocBtn: HTMLButtonElement;
   nextDocBtn: HTMLButtonElement;
+  docPosition: HTMLElement;
   toggleViewBtn: HTMLButtonElement;
+  copyBtn: HTMLButtonElement;
+  downloadBtn: HTMLAnchorElement;
+  docTitleEl: HTMLElement;
+  docBodyEl: HTMLElement;
+  secClarify: HTMLElement;
+  secGenerate: HTMLElement;
+  secReview: HTMLElement;
+  secHistory: HTMLElement;
+  clarifyTip: HTMLElement;
+  briefPanel: HTMLElement;
+  briefBody: HTMLElement;
+  progressStrip: HTMLElement;
+  sectionList: HTMLElement;
+  sectionListReview: HTMLElement;
+  activityEl: HTMLElement;
+  tocEl: HTMLElement;
   pastListEl: HTMLElement;
   pastEmptyEl: HTMLElement;
   pastFilterEl: HTMLInputElement;
-  workspaceLabelEl: HTMLElement;
   mobileTabs: HTMLElement;
-  layoutEl: HTMLElement;
 };
 
 export function getRefs(): DomRefs {
@@ -52,72 +68,57 @@ export function getRefs(): DomRefs {
     return node;
   };
   return {
-    phaseEl: el("phase"),
+    header: el("app-header"),
+    designTitle: el("design-title"),
+    statusLine: el("status-line"),
     progressLive: el("progress-live"),
-    errorEl: el("error-banner"),
-    statusEl: el("status-banner"),
-    browseBanner: el("browse-banner"),
+    systemBanner: el("system-banner"),
+    systemBannerText: el("system-banner-text"),
     backSessionBtn: el("back-session-btn") as HTMLButtonElement,
-    overwriteEl: el("overwrite-banner"),
-    transcriptEl: el("transcript"),
+    cancelBtn: el("cancel-btn") as HTMLButtonElement,
+    startOverBtn: el("start-over-btn") as HTMLButtonElement,
+    layoutEl: el("layout"),
+    railClarify: el("rail-clarify") as HTMLButtonElement,
+    railGenerate: el("rail-generate") as HTMLButtonElement,
+    railReview: el("rail-review") as HTMLButtonElement,
+    railHistory: el("rail-history") as HTMLButtonElement,
+    blockChat: el("block-chat"),
+    blockDocs: el("block-docs"),
     chatEmptyEl: el("chat-empty"),
-    briefPanel: el("brief-panel"),
-    briefBody: el("brief-body"),
+    transcriptEl: el("transcript"),
     formEl: el("chat-form") as HTMLFormElement,
     inputEl: el("chat-input") as HTMLTextAreaElement,
     sendBtn: el("send-btn") as HTMLButtonElement,
     sendHint: el("send-hint"),
-    cancelBtn: el("cancel-btn") as HTMLButtonElement,
-    newDesignBtn: el("new-design-btn") as HTMLButtonElement,
-    pipelineEl: el("pipeline"),
-    progressStrip: el("progress-strip"),
-    activityEl: el("activity-feed"),
-    completionCard: el("completion-card"),
+    reviewStrip: el("review-strip"),
     openBriefBtn: el("open-brief-btn") as HTMLButtonElement,
     openReviewBtn: el("open-review-btn") as HTMLButtonElement,
-    dismissCompleteBtn: el("dismiss-complete-btn") as HTMLButtonElement,
-    fileListEl: el("file-list"),
-    docsEmptyEl: el("docs-empty"),
-    docTitleEl: el("doc-title"),
-    docBodyEl: el("doc-body"),
-    tocEl: el("doc-toc"),
-    copyBtn: el("copy-btn") as HTMLButtonElement,
-    downloadBtn: el("download-btn") as HTMLAnchorElement,
+    openIndexBtn: el("open-index-btn") as HTMLButtonElement,
     prevDocBtn: el("prev-doc-btn") as HTMLButtonElement,
     nextDocBtn: el("next-doc-btn") as HTMLButtonElement,
+    docPosition: el("doc-position"),
     toggleViewBtn: el("toggle-view-btn") as HTMLButtonElement,
+    copyBtn: el("copy-btn") as HTMLButtonElement,
+    downloadBtn: el("download-btn") as HTMLAnchorElement,
+    docTitleEl: el("doc-title"),
+    docBodyEl: el("doc-body"),
+    secClarify: el("sec-clarify"),
+    secGenerate: el("sec-generate"),
+    secReview: el("sec-review"),
+    secHistory: el("sec-history"),
+    clarifyTip: el("clarify-tip"),
+    briefPanel: el("brief-panel"),
+    briefBody: el("brief-body"),
+    progressStrip: el("progress-strip"),
+    sectionList: el("section-list"),
+    sectionListReview: el("section-list-review"),
+    activityEl: el("activity-feed"),
+    tocEl: el("doc-toc"),
     pastListEl: el("past-list"),
     pastEmptyEl: el("past-empty"),
     pastFilterEl: el("past-filter") as HTMLInputElement,
-    workspaceLabelEl: el("workspace-label"),
     mobileTabs: el("mobile-tabs"),
-    layoutEl: el("layout"),
   };
-}
-
-function phaseLabel(phase: Phase): string {
-  switch (phase) {
-    case "idle":
-      return "Ready";
-    case "thinking":
-      return "Thinking…";
-    case "generating":
-      return "Generating docs…";
-    case "complete":
-      return "Complete";
-    case "error":
-      return "Error";
-    default:
-      return phase;
-  }
-}
-
-function formatElapsed(ms: number | null): string {
-  if (ms == null) return "";
-  const sec = Math.floor(ms / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function formatMtime(ts: number | null | undefined): string {
@@ -131,10 +132,7 @@ function formatMtime(ts: number | null | undefined): string {
 
 function renderBrief(brief: Brief | null, container: HTMLElement): void {
   container.replaceChildren();
-  if (!brief) {
-    container.textContent = "Brief appears after the coordinator saves design context.";
-    return;
-  }
+  if (!brief) return;
   const fields: [string, string | null | undefined][] = [
     ["Problem", brief.problem],
     ["Critical flows", brief.critical_flows],
@@ -156,57 +154,123 @@ function renderBrief(brief: Brief | null, container: HTMLElement): void {
     block.append(h, body);
     container.appendChild(block);
   }
-  if (!container.childElementCount) {
-    container.textContent = "Brief sections not parsed yet.";
+}
+
+function setRailState(
+  refs: DomRefs,
+  journey: Journey,
+  state: AppState
+): void {
+  const order: Array<"clarify" | "generate" | "review"> = [
+    "clarify",
+    "generate",
+    "review",
+  ];
+  const effective: "clarify" | "generate" | "review" =
+    journey === "history" ? "review" : journey;
+  const activeIndex = order.indexOf(effective);
+
+  const canGenerate =
+    state.docsCount > 0 || isBusy(state.phase) || !!state.workspace;
+  const canReview =
+    state.phase === "complete" ||
+    (state.docsTotal > 0 && state.docsCount >= state.docsTotal);
+
+  const buttons: [HTMLButtonElement, "clarify" | "generate" | "review", boolean][] =
+    [
+      [refs.railClarify, "clarify", true],
+      [refs.railGenerate, "generate", canGenerate],
+      [refs.railReview, "review", canReview],
+    ];
+
+  for (let i = 0; i < buttons.length; i++) {
+    const [btn, step, reachable] = buttons[i];
+    btn.classList.remove("is-current", "is-done", "is-upcoming");
+    btn.disabled = !reachable;
+    if (journey !== "history" && step === journey) {
+      btn.classList.add("is-current");
+    } else if (i < activeIndex || (journey === "history" && reachable)) {
+      btn.classList.add("is-done");
+    } else {
+      btn.classList.add("is-upcoming");
+    }
+  }
+
+  refs.railHistory.classList.toggle("is-current", journey === "history");
+}
+
+function fillSectionList(
+  listEl: HTMLElement,
+  state: AppState,
+  selected: string | null
+): void {
+  listEl.replaceChildren();
+  const steps =
+    state.pipeline.length > 0
+      ? state.pipeline
+      : state.files.map((f) => ({
+          id: f.name,
+          label: f.name,
+          status: f.ready ? ("ready" as const) : ("pending" as const),
+        }));
+  for (const step of steps) {
+    const ready =
+      step.status === "ready" ||
+      state.files.some((f) => f.name === step.id && f.ready);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      "section-btn" +
+      (ready ? " is-ready" : "") +
+      (selected === step.id ? " is-selected" : "");
+    btn.disabled = !ready;
+    btn.dataset.filename = step.id;
+    btn.title = step.id;
+    btn.textContent = step.label;
+    listEl.appendChild(btn);
   }
 }
 
 export function render(state: AppState, refs: DomRefs): void {
-  refs.phaseEl.textContent = phaseLabel(state.phase);
-  refs.phaseEl.dataset.phase = state.phase;
+  const journey = deriveJourney(state);
+  refs.layoutEl.dataset.journey = journey;
+  refs.layoutEl.dataset.tab = state.mobileTab;
 
-  const progressParts: string[] = [];
-  if (isBusy(state.phase)) {
-    progressParts.push(`${state.docsCount}/${state.docsTotal} documents`);
-    const elapsed = formatElapsed(state.elapsedMs);
-    if (elapsed) progressParts.push(elapsed);
-    if (state.currentStep) progressParts.push(state.currentStep.label);
-  }
-  const progressText = progressParts.join(" · ");
-  refs.progressStrip.textContent = progressText;
-  refs.progressStrip.hidden = !progressText;
-  refs.progressLive.textContent = `${phaseLabel(state.phase)}${progressText ? " — " + progressText : ""}`;
+  const browsing = journey === "history";
+  refs.header.classList.toggle("is-browsing", browsing);
 
-  if (state.error) {
-    refs.errorEl.hidden = false;
-    refs.errorEl.textContent = state.error;
+  const titleProblem =
+    state.browsingProblem ||
+    state.problem ||
+    (state.browsingWorkspace || state.workspace
+      ? state.browsingWorkspace || state.workspace
+      : null);
+  refs.designTitle.textContent = titleProblem
+    ? `Design: ${titleProblem}`
+    : "AI system-design assistant";
+
+  const status = statusLineText(state, journey);
+  refs.statusLine.textContent = status;
+  refs.progressLive.textContent = status;
+
+  const banner = systemBanner(state, journey);
+  if (banner) {
+    refs.systemBanner.hidden = false;
+    refs.systemBanner.dataset.kind = banner.kind;
+    refs.systemBannerText.textContent = banner.text;
+    refs.backSessionBtn.hidden = banner.kind !== "browse";
   } else {
-    refs.errorEl.hidden = true;
-    refs.errorEl.textContent = "";
+    refs.systemBanner.hidden = true;
+    refs.systemBannerText.textContent = "";
+    refs.backSessionBtn.hidden = true;
   }
 
-  if (state.statusMessage) {
-    refs.statusEl.hidden = false;
-    refs.statusEl.textContent = state.statusMessage;
-  } else {
-    refs.statusEl.hidden = true;
-    refs.statusEl.textContent = "";
-  }
-
-  if (state.overwriteWarning && !state.browsingWorkspace) {
-    refs.overwriteEl.hidden = false;
-    refs.overwriteEl.textContent = state.overwriteWarning;
-  } else {
-    refs.overwriteEl.hidden = true;
-  }
-
-  const browsing = !!state.browsingWorkspace;
-  refs.browseBanner.hidden = !browsing;
+  setRailState(refs, journey, state);
 
   const busy = isBusy(state.phase);
   refs.sendBtn.disabled = busy || browsing;
   refs.inputEl.disabled = busy || browsing;
-  refs.newDesignBtn.disabled = busy;
+  refs.startOverBtn.disabled = busy;
   refs.cancelBtn.hidden = !busy || browsing;
   refs.cancelBtn.disabled = !busy;
   refs.sendHint.hidden = !busy;
@@ -215,13 +279,25 @@ export function render(state: AppState, refs: DomRefs): void {
     : "";
 
   // Mobile tabs
-  refs.layoutEl.dataset.tab = state.mobileTab;
   refs.mobileTabs.querySelectorAll("button").forEach((btn) => {
     const tab = (btn as HTMLButtonElement).dataset.tab;
     btn.classList.toggle("is-active", tab === state.mobileTab);
   });
 
-  // Chat
+  // Primary blocks
+  if (journey === "clarify") {
+    refs.blockChat.hidden = false;
+    refs.blockDocs.hidden = true;
+  } else if (journey === "history" && !state.browsingWorkspace) {
+    // History list only — keep chat visible as soft backdrop or hide docs empty
+    refs.blockChat.hidden = false;
+    refs.blockDocs.hidden = true;
+  } else {
+    refs.blockChat.hidden = true;
+    refs.blockDocs.hidden = false;
+  }
+
+  // Chat transcript
   refs.transcriptEl.replaceChildren();
   if (state.messages.length === 0) {
     refs.chatEmptyEl.hidden = false;
@@ -241,65 +317,54 @@ export function render(state: AppState, refs: DomRefs): void {
     }
   }
 
-  refs.briefPanel.hidden = browsing;
-  renderBrief(state.brief, refs.briefBody);
+  // Review strip
+  refs.reviewStrip.hidden = journey !== "review";
 
-  const activeWs = state.browsingWorkspace || state.workspace;
-  refs.workspaceLabelEl.textContent = activeWs
-    ? `Workspace: ${activeWs}${browsing ? " (read-only)" : ""}`
-    : "No workspace yet";
+  // Secondary panels
+  refs.secClarify.hidden = journey !== "clarify";
+  refs.secGenerate.hidden = journey !== "generate";
+  refs.secReview.hidden = journey !== "review";
+  refs.secHistory.hidden = journey !== "history";
 
-  // Pipeline
-  refs.pipelineEl.replaceChildren();
-  for (const step of state.pipeline) {
-    const li = document.createElement("li");
-    li.className = `pipe-step pipe-${step.status}`;
-    li.textContent = step.label;
-    li.title = step.id;
-    refs.pipelineEl.appendChild(li);
+  // Brief
+  if (state.brief) {
+    refs.briefPanel.hidden = false;
+    refs.clarifyTip.hidden = true;
+    renderBrief(state.brief, refs.briefBody);
+  } else {
+    refs.briefPanel.hidden = true;
+    refs.clarifyTip.hidden = false;
   }
 
-  // Activity
-  refs.activityEl.replaceChildren();
-  if (busy && state.activity.length) {
-    refs.activityEl.hidden = false;
-    for (const a of state.activity.slice(-8).reverse()) {
-      const li = document.createElement("li");
-      li.textContent = a.message;
-      refs.activityEl.appendChild(li);
+  // Progress + sections
+  if (journey === "generate") {
+    refs.progressStrip.hidden = false;
+    refs.progressStrip.textContent = status;
+    fillSectionList(refs.sectionList, state, state.selectedFile);
+    refs.activityEl.replaceChildren();
+    if (busy && state.activity.length) {
+      refs.activityEl.hidden = false;
+      for (const a of state.activity.slice(-8).reverse()) {
+        const li = document.createElement("li");
+        li.textContent = a.message;
+        refs.activityEl.appendChild(li);
+      }
+    } else {
+      refs.activityEl.hidden = true;
     }
-  } else {
-    refs.activityEl.hidden = true;
   }
 
-  // Completion card
-  const showComplete =
-    !browsing &&
-    (state.showCompletionCard || state.justCompleted || state.phase === "complete") &&
-    state.docsCount > 0;
-  refs.completionCard.hidden = !showComplete || state.phase === "generating";
-
-  // Files
-  refs.fileListEl.replaceChildren();
-  const readyFiles = state.files.filter((f) => f.ready);
-  if (readyFiles.length === 0) {
-    refs.docsEmptyEl.hidden = false;
-  } else {
-    refs.docsEmptyEl.hidden = true;
-    for (const f of readyFiles) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "file-btn" + (state.selectedFile === f.name ? " is-selected" : "");
-      btn.textContent = f.name;
-      btn.dataset.filename = f.name;
-      refs.fileListEl.appendChild(btn);
-    }
+  if (journey === "review" || journey === "history") {
+    fillSectionList(refs.sectionListReview, state, state.selectedFile);
   }
 
   // TOC
   refs.tocEl.replaceChildren();
-  if (state.toc.length && state.viewMode === "rendered") {
+  if (
+    (journey === "review" || journey === "history") &&
+    state.toc.length &&
+    state.viewMode === "rendered"
+  ) {
     refs.tocEl.hidden = false;
     for (const t of state.toc) {
       const a = document.createElement("a");
@@ -313,39 +378,59 @@ export function render(state: AppState, refs: DomRefs): void {
     refs.tocEl.hidden = true;
   }
 
-  // Doc pane
-  const readyNames = readyFiles.map((f) => f.name);
-  const idx = state.selectedFile ? readyNames.indexOf(state.selectedFile) : -1;
+  // Doc chrome
+  const readyNames = state.pipeline
+    .filter(
+      (p) =>
+        p.status === "ready" ||
+        state.files.some((f) => f.name === p.id && f.ready)
+    )
+    .map((p) => p.id);
+  const readyFallback = state.files.filter((f) => f.ready).map((f) => f.name);
+  const ready = readyNames.length ? readyNames : readyFallback;
+  const idx = state.selectedFile ? ready.indexOf(state.selectedFile) : -1;
   refs.prevDocBtn.disabled = idx <= 0;
-  refs.nextDocBtn.disabled = idx < 0 || idx >= readyNames.length - 1;
+  refs.nextDocBtn.disabled = idx < 0 || idx >= ready.length - 1;
+
+  const selectedLabel =
+    state.pipeline.find((p) => p.id === state.selectedFile)?.label ||
+    state.selectedFile ||
+    "—";
+  if (state.selectedFile && idx >= 0) {
+    refs.docPosition.textContent = `${selectedLabel} · ${idx + 1} of ${ready.length}`;
+  } else {
+    refs.docPosition.textContent = selectedLabel;
+  }
+
   refs.toggleViewBtn.textContent =
-    state.viewMode === "rendered" ? "Raw" : "Rendered";
+    state.viewMode === "rendered" ? "View source" : "View rendered";
   refs.toggleViewBtn.disabled = !state.selectedFile;
 
   if (state.selectedFile && state.viewMode === "raw" && state.docMarkdown) {
-    refs.docTitleEl.textContent = state.selectedFile;
+    refs.docTitleEl.textContent = selectedLabel;
     setDocRaw(refs.docBodyEl, state.docMarkdown);
     refs.copyBtn.disabled = false;
   } else if (state.selectedFile && state.docHtml) {
-    refs.docTitleEl.textContent = state.selectedFile;
+    refs.docTitleEl.textContent = selectedLabel;
     setDocHtml(refs.docBodyEl, state.docHtml);
     refs.copyBtn.disabled = !state.docMarkdown;
   } else if (state.selectedFile) {
-    refs.docTitleEl.textContent = state.selectedFile;
+    refs.docTitleEl.textContent = selectedLabel;
     clearDoc(refs.docBodyEl, "Loading…");
     refs.copyBtn.disabled = true;
   } else {
     refs.docTitleEl.textContent = "Document";
     clearDoc(
       refs.docBodyEl,
-      readyFiles.length === 0
-        ? "Documents will appear here as the pipeline writes them."
-        : "Select a file to read."
+      ready.length === 0
+        ? "Documents appear as the pipeline writes them."
+        : "Select a section to read."
     );
     refs.copyBtn.disabled = true;
   }
 
-  if (activeWs && readyFiles.length > 0) {
+  const activeWs = state.browsingWorkspace || state.workspace;
+  if (activeWs && ready.length > 0) {
     refs.downloadBtn.hidden = false;
     refs.downloadBtn.href = `/api/workspaces/${encodeURIComponent(activeWs)}/download`;
   } else {
@@ -355,29 +440,26 @@ export function render(state: AppState, refs: DomRefs): void {
 
   // Past workspaces
   refs.pastListEl.replaceChildren();
-  const filtered = state.pastWorkspaces;
-  if (filtered.length === 0) {
+  if (state.pastWorkspaces.length === 0) {
     refs.pastEmptyEl.hidden = false;
   } else {
     refs.pastEmptyEl.hidden = true;
-    for (const w of filtered) {
+    for (const w of state.pastWorkspaces) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className =
         "past-btn" +
-        (state.browsingWorkspace === w.name ||
-        (!state.browsingWorkspace && state.workspace === w.name)
-          ? " is-selected"
-          : "");
+        (state.browsingWorkspace === w.name ? " is-selected" : "");
       btn.dataset.workspace = w.name;
+      if (w.problem) btn.dataset.problem = w.problem;
       const title = document.createElement("span");
       title.className = "past-name";
-      title.textContent = w.name;
+      title.textContent = w.problem || w.name;
       btn.appendChild(title);
       const meta = document.createElement("span");
       meta.className = "past-problem";
       const bits = [
-        w.problem || "",
+        w.name,
         typeof w.docs_count === "number" ? `${w.docs_count} docs` : "",
         formatMtime(w.mtime),
       ].filter(Boolean);

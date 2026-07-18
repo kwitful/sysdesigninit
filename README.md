@@ -200,19 +200,17 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/). API keys stay in
 `sys_des_in/.env` (never exposed to the browser).
 
-**Web UI features (v1.1–v1.3):**
+**Web UI (v2 clarity):**
 
-- Live progress while generating (`docs written · elapsed time · current step`)
-  via polling, with Server-Sent Events preferred when available (poll fallback).
-- Activity feed as each design file lands; **Cancel** soft-stops an in-flight turn.
-- Completion card linking to **problem brief** and **review**.
-- Design brief panel (parsed from coordinator context), prev/next docs, TOC,
-  raw/rendered toggle, and hash deep links.
-- Chat persisted to `design_outputs/<workspace>/chat.json` once a workspace
-  exists; pre-workspace chat mirrored in `sessionStorage`.
-- Past designs: filter/search, mtime + doc count, read-only browse with
-  “Back to current session”, zip download.
-- Mobile tabs: Chat | Docs | History.
+- Journey rail: **Clarify → Generate → Review**, plus **History**
+- One status line that explains what to do next; single system banner for
+  errors / cancel / overwrite / read-only browse
+- Staged panes: chat during clarify; document reader during generate/review;
+  past designs only in History (not under the file list)
+- Guided review actions: problem brief, specificity review, full packet index
+- Humanized section labels; **Start over**; Cancel during generation
+- Live progress via SSE (poll fallback); chat.json persistence; zip download
+- Mobile tabs: Chat | Docs | History
 
 ### Option B — ADK web UI
 

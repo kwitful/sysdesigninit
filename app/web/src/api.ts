@@ -47,6 +47,7 @@ export type SessionState = {
   session_id: string;
   phase: Phase;
   workspace: string | null;
+  problem: string | null;
   last_assistant: string | null;
   last_user: string | null;
   error: string | null;

@@ -172,6 +172,7 @@ def session_response(ws: WebSession) -> SessionStateResponse:
         session_id=ws.id,
         phase=phase,  # type: ignore[arg-type]
         workspace=ws.workspace,
+        problem=docs_service.read_problem(ws.workspace),
         last_assistant=ws.last_assistant,
         last_user=ws.last_user,
         error=ws.error,

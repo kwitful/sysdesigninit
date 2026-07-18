@@ -65,6 +65,7 @@ class SessionStateResponse(BaseModel):
     session_id: str
     phase: Phase
     workspace: Optional[str] = None
+    problem: Optional[str] = None
     last_assistant: Optional[str] = None
     last_user: Optional[str] = None
     error: Optional[str] = None

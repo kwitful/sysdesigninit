@@ -44,10 +44,13 @@ export type TocEntry = {
 
 export type MobileTab = "chat" | "docs" | "history";
 
+export type JourneyOverride = "clarify" | "generate" | "review" | null;
+
 export type AppState = {
   sessionId: string | null;
   phase: Phase;
   workspace: string | null;
+  problem: string | null;
   messages: ChatMessage[];
   lastAssistantSeen: string | null;
   files: FileEntry[];
@@ -60,6 +63,7 @@ export type AppState = {
   error: string | null;
   statusMessage: string | null;
   browsingWorkspace: string | null;
+  browsingProblem: string | null;
   pastWorkspaces: {
     name: string;
     problem: string | null;
@@ -76,7 +80,9 @@ export type AppState = {
   justCompleted: boolean;
   brief: Brief | null;
   overwriteWarning: string | null;
-  showCompletionCard: boolean;
+  journeyOverride: JourneyOverride;
+  /** Show History secondary panel without browsing a workspace yet. */
+  forceHistory: boolean;
   mobileTab: MobileTab;
   useSse: boolean;
 };
@@ -86,6 +92,7 @@ export function createInitialState(): AppState {
     sessionId: null,
     phase: "idle",
     workspace: null,
+    problem: null,
     messages: [],
     lastAssistantSeen: null,
     files: [],
@@ -98,6 +105,7 @@ export function createInitialState(): AppState {
     error: null,
     statusMessage: null,
     browsingWorkspace: null,
+    browsingProblem: null,
     pastWorkspaces: [],
     pastFilter: "",
     pollTimer: null,
@@ -109,7 +117,8 @@ export function createInitialState(): AppState {
     justCompleted: false,
     brief: null,
     overwriteWarning: null,
-    showCompletionCard: false,
+    journeyOverride: null,
+    forceHistory: false,
     mobileTab: "chat",
     useSse: true,
   };

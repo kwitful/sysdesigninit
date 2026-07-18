@@ -8,29 +8,30 @@
   </head>
   <body>
     <div class="app">
-      <header class="top">
+      <header class="top" id="app-header">
         <div class="brand">
           <h1 class="brand-name">sysdesigninit</h1>
-          <p class="brand-tag">AI system-design assistant</p>
+          <p id="design-title" class="design-title">AI system-design assistant</p>
         </div>
         <div class="top-meta">
-          <span id="phase" class="phase" data-phase="idle" aria-live="off">Ready</span>
+          <p id="status-line" class="status-line">
+            Describe what to design — include product, scale, and interview / mvp /
+            production.
+          </p>
           <button type="button" id="cancel-btn" class="btn btn-ghost" hidden>
             Cancel
           </button>
-          <button type="button" id="new-design-btn" class="btn btn-ghost">
-            New design
+          <button type="button" id="start-over-btn" class="btn btn-ghost">
+            Start over
           </button>
         </div>
       </header>
 
       <div id="progress-live" class="sr-only" aria-live="polite"></div>
-      <div id="error-banner" class="error-banner" hidden></div>
-      <div id="status-banner" class="status-banner" hidden></div>
-      <div id="overwrite-banner" class="overwrite-banner" hidden></div>
-      <div id="browse-banner" class="browse-banner" hidden>
-        Viewing a past design (read-only).
-        <button type="button" id="back-session-btn" class="btn btn-ghost">
+
+      <div id="system-banner" class="system-banner" hidden>
+        <span id="system-banner-text"></span>
+        <button type="button" id="back-session-btn" class="btn btn-ghost" hidden>
           Back to current session
         </button>
       </div>
@@ -41,107 +42,140 @@
         <button type="button" data-tab="history">History</button>
       </nav>
 
-      <main id="layout" class="layout" data-tab="chat">
-        <section class="pane pane-chat" data-pane="chat" aria-label="Chat">
-          <div class="pane-head">
-            <h2>Conversation</h2>
-          </div>
-          <div id="brief-panel" class="brief-panel">
-            <details open>
-              <summary>Design brief</summary>
-              <div id="brief-body" class="brief-body"></div>
-            </details>
-          </div>
-          <div id="chat-empty" class="empty">
-            Describe a system to design. The coordinator will ask a few clarifying
-            questions, then generate design documents.
-          </div>
-          <div id="transcript" class="transcript"></div>
-          <form id="chat-form" class="composer">
-            <label class="sr-only" for="chat-input">Your message</label>
-            <textarea
-              id="chat-input"
-              rows="3"
-              placeholder="e.g. Design a URL shortener for a startup, interview-level"
-              maxlength="8000"
-            ></textarea>
-            <div class="composer-actions">
-              <p id="send-hint" class="send-hint" hidden></p>
-              <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+      <main id="layout" class="layout" data-journey="clarify" data-tab="chat">
+        <nav id="step-rail" class="step-rail" aria-label="Design journey">
+          <button type="button" class="rail-step" data-step="clarify" id="rail-clarify">
+            <span class="rail-num">1</span>
+            <span class="rail-label">Clarify</span>
+          </button>
+          <button type="button" class="rail-step" data-step="generate" id="rail-generate">
+            <span class="rail-num">2</span>
+            <span class="rail-label">Generate</span>
+          </button>
+          <button type="button" class="rail-step" data-step="review" id="rail-review">
+            <span class="rail-num">3</span>
+            <span class="rail-label">Review</span>
+          </button>
+          <button type="button" class="rail-history" id="rail-history" data-step="history">
+            History
+          </button>
+        </nav>
+
+        <section id="primary" class="pane pane-primary" aria-label="Primary">
+          <!-- Clarify: chat -->
+          <div id="block-chat" class="block-chat">
+            <div class="pane-head">
+              <h2>Conversation</h2>
             </div>
-          </form>
-        </section>
-
-        <section class="pane pane-docs" data-pane="docs" aria-label="Documents">
-          <div class="pane-head">
-            <h2>Documents</h2>
-            <span id="workspace-label" class="workspace-label">No workspace yet</span>
-          </div>
-
-          <div id="completion-card" class="completion-card" hidden>
-            <p class="completion-title">Design packet ready</p>
-            <p class="completion-copy">
-              Start with the problem brief, then check the specificity review.
-            </p>
-            <div class="completion-actions">
-              <button type="button" id="open-brief-btn" class="btn btn-primary">
-                Open problem brief
-              </button>
-              <button type="button" id="open-review-btn" class="btn btn-ghost">
-                Open review
-              </button>
-              <button type="button" id="dismiss-complete-btn" class="btn btn-ghost">
-                Dismiss
-              </button>
+            <div id="chat-empty" class="empty teach-empty">
+              <p class="teach-lead">How it works</p>
+              <ol class="teach-steps">
+                <li>Describe your system</li>
+                <li>Answer a few clarifying questions</li>
+                <li>Get 12 linked design documents</li>
+              </ol>
             </div>
+            <div id="transcript" class="transcript"></div>
+            <form id="chat-form" class="composer">
+              <label class="sr-only" for="chat-input">Your message</label>
+              <textarea
+                id="chat-input"
+                rows="3"
+                placeholder="e.g. Design a URL shortener for a startup, interview-level"
+                maxlength="8000"
+              ></textarea>
+              <div class="composer-actions">
+                <p id="send-hint" class="send-hint" hidden></p>
+                <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+              </div>
+            </form>
           </div>
 
-          <div class="docs-toolbar">
-            <div id="progress-strip" class="progress-strip" hidden></div>
-            <ol id="pipeline" class="pipeline" aria-label="Pipeline progress"></ol>
-            <ul id="activity-feed" class="activity-feed" hidden></ul>
-            <div class="docs-actions">
+          <!-- Generate / Review: document reader -->
+          <div id="block-docs" class="block-docs" hidden>
+            <div id="review-strip" class="review-strip" hidden>
+              <p class="review-lead">Guided review</p>
+              <div class="review-actions">
+                <button type="button" id="open-brief-btn" class="btn btn-primary">
+                  Did we understand the problem?
+                </button>
+                <button type="button" id="open-review-btn" class="btn btn-ghost">
+                  What’s still generic?
+                </button>
+                <button type="button" id="open-index-btn" class="btn btn-ghost">
+                  Full packet
+                </button>
+              </div>
+            </div>
+
+            <div class="doc-chrome">
               <button type="button" id="prev-doc-btn" class="btn btn-ghost" disabled>
-                Prev
+                Previous
               </button>
+              <span id="doc-position" class="doc-position">—</span>
               <button type="button" id="next-doc-btn" class="btn btn-ghost" disabled>
                 Next
               </button>
-              <button type="button" id="toggle-view-btn" class="btn btn-ghost" disabled>
-                Raw
-              </button>
-              <button type="button" id="copy-btn" class="btn btn-ghost" disabled>
-                Copy
-              </button>
-              <a id="download-btn" class="btn btn-ghost" hidden>Download zip</a>
-            </div>
-          </div>
-
-          <div class="docs-split">
-            <div class="file-col" data-pane="history">
-              <div id="docs-empty" class="empty empty-sm">No documents yet.</div>
-              <div id="file-list" class="file-list"></div>
-              <nav id="doc-toc" class="doc-toc" hidden aria-label="On this page"></nav>
-
-              <div class="past-block">
-                <h3>Past designs</h3>
-                <label class="sr-only" for="past-filter">Filter past designs</label>
-                <input
-                  id="past-filter"
-                  class="past-filter"
-                  type="search"
-                  placeholder="Filter by name or problem"
-                />
-                <div id="past-empty" class="empty empty-sm">No past workspaces.</div>
-                <div id="past-list" class="past-list"></div>
+              <div class="doc-chrome-actions">
+                <button type="button" id="toggle-view-btn" class="btn btn-ghost" disabled>
+                  View source
+                </button>
+                <button type="button" id="copy-btn" class="btn btn-ghost" disabled>
+                  Copy
+                </button>
+                <a id="download-btn" class="btn btn-ghost" hidden>Download all documents</a>
               </div>
             </div>
+
             <article class="doc-pane">
               <h3 id="doc-title" class="doc-title">Document</h3>
               <div id="doc-body" class="doc-body"></div>
             </article>
           </div>
         </section>
+
+        <aside id="secondary" class="pane pane-secondary" aria-label="Secondary">
+          <div id="sec-clarify" class="sec-panel">
+            <p id="clarify-tip" class="clarify-tip">
+              Tip: say <em>interview</em>, <em>mvp</em>, or <em>production</em> to set
+              depth.
+            </p>
+            <div id="brief-panel" class="brief-panel" hidden>
+              <h3 class="sec-heading">Design brief</h3>
+              <div id="brief-body" class="brief-body"></div>
+            </div>
+          </div>
+
+          <div id="sec-generate" class="sec-panel" hidden>
+            <h3 class="sec-heading">Sections</h3>
+            <div id="progress-strip" class="progress-strip" hidden></div>
+            <ol id="section-list" class="section-list" aria-label="Document sections"></ol>
+            <ul id="activity-feed" class="activity-feed" hidden></ul>
+          </div>
+
+          <div id="sec-review" class="sec-panel" hidden>
+            <h3 class="sec-heading">Sections</h3>
+            <ol
+              id="section-list-review"
+              class="section-list"
+              aria-label="Document sections"
+            ></ol>
+            <nav id="doc-toc" class="doc-toc" hidden aria-label="On this page"></nav>
+          </div>
+
+          <div id="sec-history" class="sec-panel" hidden>
+            <h3 class="sec-heading">Past designs</h3>
+            <label class="sr-only" for="past-filter">Filter past designs</label>
+            <input
+              id="past-filter"
+              class="past-filter"
+              type="search"
+              placeholder="Filter by name or problem"
+            />
+            <div id="past-empty" class="empty empty-sm">No past workspaces.</div>
+            <div id="past-list" class="past-list"></div>
+          </div>
+        </aside>
       </main>
     </div>
     <script type="module" src="/static/js/main.js"></script>

@@ -141,6 +141,24 @@ def workspace_exists(name: str) -> bool:
     return path.is_dir()
 
 
+def read_problem(workspace: Optional[str]) -> Optional[str]:
+    """Read .problem.txt for a workspace (path-safe); None if missing."""
+    if not workspace:
+        return None
+    try:
+        ws_dir = resolve_workspace_dir(workspace)
+    except SecurityError:
+        return None
+    marker = ws_dir / ".problem.txt"
+    if not marker.is_file():
+        return None
+    try:
+        text = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
+
+
 def build_workspace_zip(workspace: str) -> bytes:
     """Zip allowlisted files only; arcnames are bare filenames."""
     ws_dir = resolve_workspace_dir(workspace)
